@@ -1,0 +1,78 @@
+{{define "_topbar"}}
+<header class="topbar">
+  <div class="topbar-inner">
+    {{if .LoggedIn}}<button type="button" class="nav-toggle" aria-controls="sidebar" aria-expanded="false">☰<span class="visually-hidden">Menu</span></button>{{end}}
+    <a class="brand" href="/">Splitpayments</a>
+    {{if .LoggedIn}}
+    <div class="topbar-user">
+      <span class="user-chip">{{.CurrentUser.Name}}{{if .CurrentUser.IsGuest}} (guest){{end}}</span>
+      <form method="post" action="/logout" class="inline-form">
+        <button type="submit" class="btn btn-ghost btn-small">Log out</button>
+      </form>
+    </div>
+    {{end}}
+  </div>
+</header>
+{{end}}
+
+{{define "_sidebar"}}
+<aside class="sidebar" id="sidebar">
+  <nav class="sidenav" aria-label="Main">
+    <a class="sidenav-link" href="/"{{if eq .Path "/"}} aria-current="page"{{end}}>Dashboard</a>
+    <a class="sidenav-link" href="/activity"{{if eq .Path "/activity"}} aria-current="page"{{end}}>Activity</a>
+  </nav>
+
+  <div class="sidenav-section">
+    <div class="sidenav-head">
+      <span class="sidenav-title">Groups</span>
+      <details class="nav-add">
+        <summary class="nav-add-btn" title="Add a group">+</summary>
+        <form method="post" action="/groups" class="nav-add-form">
+          <input type="text" name="name" placeholder="Group name" required aria-label="New group name">
+          <button type="submit" class="btn btn-primary btn-small btn-block">Create group</button>
+        </form>
+      </details>
+    </div>
+    {{if .Nav.Groups}}
+    <ul class="sidenav-list">
+      {{range .Nav.Groups}}
+      <li><a class="sidenav-item" href="/groups/{{.ID}}"{{if hasPrefix (print $.Path "/") (printf "/groups/%d/" .ID)}} aria-current="page"{{end}}>{{.Name}}</a></li>
+      {{end}}
+    </ul>
+    {{else}}
+    <p class="sidenav-empty">No groups yet.</p>
+    {{end}}
+  </div>
+
+  <div class="sidenav-section">
+    <div class="sidenav-head">
+      <span class="sidenav-title">Friends</span>
+      <details class="nav-add">
+        <summary class="nav-add-btn" title="Add a friend">+</summary>
+        <form method="post" action="/friends" class="nav-add-form">
+          <input type="text" name="identity" placeholder="Email or name" required aria-label="Friend's email or name">
+          <button type="submit" class="btn btn-primary btn-small btn-block">Add friend</button>
+        </form>
+      </details>
+    </div>
+    {{if .Nav.Friends}}
+    <ul class="sidenav-list">
+      {{range .Nav.Friends}}
+      <li><a class="sidenav-item" href="/friends/{{.ID}}"{{if hasPrefix (print $.Path "/") (printf "/friends/%d/" .ID)}} aria-current="page"{{end}}>{{.Name}}{{if .IsGuest}} <span class="tag">guest</span>{{end}}</a></li>
+      {{end}}
+    </ul>
+    {{else}}
+    <p class="sidenav-empty">No friends yet.</p>
+    {{end}}
+  </div>
+</aside>
+{{end}}
+
+{{define "_flash"}}
+{{if .Flash}}
+<div class="flash flash-{{.FlashKind}}" role="status">
+  <span class="flash-text">{{.Flash}}</span>
+  <a class="flash-close" href="{{.Path}}" aria-label="Dismiss">×</a>
+</div>
+{{end}}
+{{end}}

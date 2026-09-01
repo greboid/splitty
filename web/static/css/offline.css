@@ -1,0 +1,76 @@
+/* Styles for the offline fallback page. Kept separate and un-versioned so
+   the service worker can precache it under a stable URL; the palette is
+   duplicated from app.css on purpose (the page must render with no other
+   assets available). */
+
+:root {
+  color-scheme: light;
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --text: #1f2430;
+  --muted: #6b7280;
+  --border: #e2e5ea;
+  --primary: #3b6ef6;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #12141a;
+    --surface: #1a1d24;
+    --text: #e6e8ee;
+    --muted: #9aa1af;
+    --border: #2a2f3a;
+    --primary: #4a7dff;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.offline-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.08);
+  padding: 2rem 1.75rem;
+  max-width: 340px;
+  text-align: center;
+}
+
+.offline-icon {
+  font-size: 1.9rem;
+  width: 3.4rem;
+  height: 3.4rem;
+  line-height: 3.4rem;
+  margin: 0 auto 0.9rem;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+}
+
+.offline-card h1 { font-size: 1.3rem; margin: 0 0 0.4rem; }
+.offline-card p { color: var(--muted); font-size: 0.93rem; margin: 0 0 1.3rem; }
+
+.btn {
+  display: inline-block;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 0.5rem 1.2rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  background: var(--primary);
+  color: #fff;
+  text-decoration: none;
+}

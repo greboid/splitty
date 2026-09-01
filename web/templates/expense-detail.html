@@ -1,0 +1,69 @@
+{{define "title"}}{{.Expense.Description}}{{end}}
+{{define "content"}}
+<div class="page-head">
+  <div>
+    <h1>{{if .Expense.IsPayment}}<span class="tag tag-payment">payment</span> {{end}}{{.Expense.Description}}</h1>
+    <p class="muted">{{dateFmt .Expense.Date}} · {{title .Expense.Category}} · {{.GroupName}}</p>
+  </div>
+  <div class="page-actions">
+    {{if not .Expense.IsPayment}}
+    <a class="btn btn-secondary" href="/expenses/{{.Expense.ID}}/edit">Edit</a>
+    {{end}}
+    <form method="post" action="/expenses/{{.Expense.ID}}/delete" class="inline-form js-confirm" data-confirm="Delete “{{.Expense.Description}}”?">
+      <button type="submit" class="btn btn-danger">Delete</button>
+    </form>
+  </div>
+</div>
+
+{{if .Expense.Notes}}<p class="notes card">{{.Expense.Notes}}</p>{{end}}
+
+<section class="card">
+  <div class="card-head"><h2>Split</h2></div>
+  <table class="table">
+    <thead><tr><th>Person</th><th class="num">Paid</th><th class="num">Their share</th></tr></thead>
+    <tbody>
+      {{range .Rows}}
+      <tr>
+        <td>{{.Name}}</td>
+        <td class="num">{{if gt .Paid 0}}{{money .Paid}}{{else}}—{{end}}</td>
+        <td class="num">{{money .Owed}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td>Total</td>
+        <td class="num">{{money .Expense.Total}}</td>
+        <td class="num">{{money .Expense.Total}}</td>
+      </tr>
+    </tfoot>
+  </table>
+</section>
+
+{{if .Items}}
+<section class="card">
+  <div class="card-head"><h2>Items</h2></div>
+  <table class="table">
+    <thead><tr><th>Item</th><th class="num">Amount</th><th>Assigned to</th></tr></thead>
+    <tbody>
+      {{range .Items}}
+      <tr>
+        <td>{{.Description}}</td>
+        <td class="num">{{money .Amount}}</td>
+        <td>{{join .People ", "}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</section>
+{{end}}
+
+{{if .ReceiptURL}}
+<section class="card">
+  <div class="card-head"><h2>Receipt</h2></div>
+  <a href="{{.ReceiptURL}}"><img class="receipt-image" src="{{.ReceiptURL}}" alt="Scanned receipt"></a>
+</section>
+{{end}}
+
+<p><a class="btn btn-ghost" href="/groups/{{.Expense.GroupID}}">← Back to {{.GroupName}}</a></p>
+{{end}}

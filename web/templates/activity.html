@@ -1,0 +1,26 @@
+{{define "title"}}Activity{{end}}
+{{define "content"}}
+<div class="page-head">
+  <h1>Activity</h1>
+</div>
+
+<section class="card">
+  {{if .Entries}}
+  <ul class="activity-list">
+    {{range .Entries}}
+    <li class="activity-row">
+      <span class="activity-icon icon-{{.Type}}">{{if eq .Type "payment_added"}}⇄{{else if eq .Type "expense_deleted"}}✕{{else if eq .Type "group_created"}}☆{{else if eq .Type "joined_group"}}☺{{else if eq .Type "member_added"}}+{{else if eq .Type "expense_updated"}}✎{{else}}≡{{end}}</span>
+      <div class="activity-body">
+        <span class="activity-detail">{{.Detail}}</span>
+        <span class="activity-meta">
+          {{if .GroupName}}{{.GroupName}} · {{end}}{{datetime .CreatedAt}}
+        </span>
+      </div>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="muted">Nothing has happened yet. Add an expense to get things going.</p>
+  {{end}}
+</section>
+{{end}}

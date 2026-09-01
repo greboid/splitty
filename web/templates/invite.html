@@ -1,0 +1,41 @@
+{{define "title"}}Invite{{end}}
+{{define "content"}}
+<div class="auth-card card">
+  <h1>Invite for {{.Invite.Email}}</h1>
+
+  {{if .Invite.Accepted}}
+    <p class="muted">This invite has already been used.</p>
+    <a class="btn btn-primary" href="/">Go to the dashboard</a>
+
+  {{else if .Invite.Expired}}
+    <p class="form-error">This invite expired on {{dateFmt .Invite.ExpiresAt}}.
+    Ask the person who invited you for a new link.</p>
+
+  {{else if .ExistingUser}}
+    <p>An account already exists for <strong>{{.Invite.Email}}</strong>.</p>
+    <p>Log in as that account to accept the invite
+    {{if .Invite.GroupID.Valid}}and join <strong>{{.Invite.GroupName}}</strong>{{end}}.</p>
+    <a class="btn btn-primary" href="/login?next={{.Path}}">Log in</a>
+
+  {{else}}
+    {{if .Invite.GroupID.Valid}}
+      <p><strong>{{.Invite.InviterName}}</strong> invited you to join
+      <strong>{{.Invite.GroupName}}</strong> on Splitpayments.</p>
+    {{else}}
+      <p><strong>{{.Invite.InviterName}}</strong> invited you to Splitpayments.</p>
+    {{end}}
+    {{if .Error}}<p class="form-error">{{.Error}}</p>{{end}}
+    <form method="post">
+      <div class="field">
+        <label for="name">Your name</label>
+        <input type="text" id="name" name="name" required value="{{.Name}}" autofocus>
+      </div>
+      <div class="field">
+        <label for="password">Choose a password <small>(at least 8 characters)</small></label>
+        <input type="password" id="password" name="password" required minlength="8" autocomplete="new-password">
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">Claim your account</button>
+    </form>
+  {{end}}
+</div>
+{{end}}

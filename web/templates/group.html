@@ -1,0 +1,166 @@
+{{define "title"}}{{.Group.Name}}{{end}}
+{{define "content"}}
+<div class="page-head">
+  <div>
+    <h1>{{.Group.Name}}</h1>
+    <p class="muted">Debts are simplified · {{money .TotalSpend}} total{{if ne .TotalSpend 0}} spend{{end}}</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn-primary" href="/groups/{{.Group.ID}}/expenses/new">Add expense</a>
+    <a class="btn btn-ghost" href="/groups/{{.Group.ID}}/export.csv">Export CSV</a>
+  </div>
+</div>
+
+{{if .DraftID}}
+<div class="draft-banner">
+  <span>You have an unfinished expense in this group.</span>
+  <span class="draft-banner-actions">
+    <a class="btn btn-primary btn-small" href="/drafts/{{.DraftID}}">Resume draft</a>
+    <form method="post" action="/drafts/{{.DraftID}}/discard" class="js-confirm inline-form"
+          data-confirm="Discard the draft expense? Everything entered so far will be lost.">
+      <button type="submit" class="btn btn-ghost btn-small">Discard</button>
+    </form>
+  </span>
+</div>
+{{end}}
+
+<div class="grid-2">
+  <section class="card">
+    <div class="card-head"><h2>Balances</h2></div>
+    <ul class="list">
+      {{range .Members}}
+      <li class="list-row">
+        <span class="list-main">{{.User.Name}}{{if .IsYou}} <span class="tag">you</span>{{end}}{{if .User.IsGuest}} <span class="tag">guest</span>{{end}}</span>
+        <span class="list-amount {{if lt .Net 0}}negative{{else if gt .Net 0}}positive{{end}}">
+          {{if eq .Net 0}}settled up{{else if gt .Net 0}}gets {{money .Net}}{{else}}owes {{money (mul .Net -1)}}{{end}}
+        </span>
+      </li>
+      {{end}}
+    </ul>
+
+    {{if .Debts}}
+    <div class="subhead">
+      <h3>Suggested payments</h3>
+    </div>
+    <ul class="debts">
+      {{range .Debts}}
+      <li>{{.FromName}} owes {{.ToName}} <strong>{{money .Amount}}</strong></li>
+      {{end}}
+    </ul>
+    {{end}}
+
+    {{if .CanSettle}}
+    <details class="settle-box">
+      <summary>Settle up</summary>
+      <form method="post" action="/groups/{{.Group.ID}}/settle" class="settle-form">
+        <div class="field">
+          <label for="settle-from">Who paid</label>
+          <select id="settle-from" name="from" required>
+            {{range .Members}}<option value="{{.User.ID}}">{{.User.Name}}</option>{{end}}
+          </select>
+        </div>
+        <div class="field">
+          <label for="settle-to">received it</label>
+          <select id="settle-to" name="to" required>
+            {{range .Members}}<option value="{{.User.ID}}">{{.User.Name}}</option>{{end}}
+          </select>
+        </div>
+        <div class="field">
+          <label for="settle-amount">Amount</label>
+          <input type="text" id="settle-amount" name="amount" inputmode="decimal" placeholder="0.00" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Record payment</button>
+      </form>
+    </details>
+    {{end}}
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>Members</h2>
+    </div>
+    <ul class="list">
+      {{range .Members}}
+      <li class="list-row">
+        <span class="list-main">{{.User.Name}}{{if .IsYou}} <span class="tag">you</span>{{end}}</span>
+        {{if not .IsYou}}{{if not .User.IsGuest}}<a class="btn btn-ghost btn-small" href="/friends/{{.User.ID}}">Direct</a>{{end}}{{end}}
+      </li>
+      {{end}}
+    </ul>
+    {{if not .Group.IsDirect}}
+    <form method="post" action="/groups/{{.Group.ID}}/members" class="row-form">
+      <input type="text" name="identity" placeholder="Email or name" required aria-label="Email or name">
+      <button type="submit" class="btn btn-secondary">Add member</button>
+    </form>
+    <p class="hint">An email invites an existing account or creates an invite link; anything else becomes a name-only guest.</p>
+    {{end}}
+
+    {{if .Pending}}
+    <div class="subhead"><h3>Pending invites</h3></div>
+    <ul class="list">
+      {{range .Pending}}
+      <li class="list-row"><span class="list-main">{{.Email}}</span><span class="list-sub">expires {{dateFmt .ExpiresAt}}</span></li>
+      {{end}}
+    </ul>
+    {{end}}
+
+    <details class="settings-box">
+      <summary>Group settings</summary>
+      <form method="post" action="/groups/{{.Group.ID}}/settings">
+        <div class="field">
+          <label for="group-name">Name</label>
+          <input type="text" id="group-name" name="name" value="{{.Group.Name}}" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Save settings</button>
+      </form>
+    </details>
+  </section>
+</div>
+
+<section class="card">
+  <div class="card-head"><h2>Expenses</h2></div>
+  {{if .Expenses}}
+  <table class="table">
+    <thead>
+      <tr><th>Date</th><th>Description</th><th>Paid by</th><th class="num">Your share</th><th class="num">Total</th></tr>
+    </thead>
+    <tbody>
+      {{range .Expenses}}
+      <tr{{if .Expense.IsPayment}} class="row-payment"{{end}}>
+        <td>{{dateFmt .Expense.Date}}</td>
+        <td>
+          {{if .Expense.IsPayment}}<span class="tag tag-payment">payment</span> {{end}}
+          <a href="/expenses/{{.Expense.ID}}">{{.Expense.Description}}</a>
+        </td>
+        <td>{{.PaidBy}}</td>
+        <td class="num {{if lt .YourImpact 0}}negative{{else if gt .YourImpact 0}}positive{{end}}">
+          {{if eq .YourImpact 0}}—{{else}}{{moneySigned .YourImpact}}{{end}}
+        </td>
+        <td class="num">{{money .Expense.Total}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{else}}
+  <p class="muted">No expenses yet.</p>
+  {{end}}
+</section>
+
+<section class="card">
+  <div class="card-head"><h2>Recent activity</h2><a class="btn btn-ghost btn-small" href="/activity">All</a></div>
+  {{if .Activity}}
+  <ul class="activity-list">
+    {{range .Activity}}
+    <li class="activity-row">
+      <div class="activity-body">
+        <span class="activity-detail">{{.Detail}}</span>
+        <span class="activity-meta">{{datetime .CreatedAt}}</span>
+      </div>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="muted">No activity yet.</p>
+  {{end}}
+</section>
+{{end}}

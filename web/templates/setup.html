@@ -1,0 +1,24 @@
+{{define "title"}}Welcome{{end}}
+{{define "content"}}
+<div class="auth-card card">
+  <h1>Welcome to Splitpayments</h1>
+  <p>This instance is brand new — create the first account to get started.
+  It will be the owner account; everyone else joins via invite links.</p>
+  {{if .Error}}<p class="form-error">{{.Error}}</p>{{end}}
+  <form method="post" action="/setup">
+    <div class="field">
+      <label for="name">Your name</label>
+      <input type="text" id="name" name="name" required autocomplete="name" autofocus>
+    </div>
+    <div class="field">
+      <label for="email">Email</label>
+      <input type="email" id="email" name="email" required autocomplete="email">
+    </div>
+    <div class="field">
+      <label for="password">Password <small>(at least 8 characters)</small></label>
+      <input type="password" id="password" name="password" required minlength="8" autocomplete="new-password">
+    </div>
+    <button type="submit" class="btn btn-primary btn-block">Create account</button>
+  </form>
+</div>
+{{end}}

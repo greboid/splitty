@@ -1,0 +1,30 @@
+{{define "title"}}Groups{{end}}
+{{define "content"}}
+<div class="page-head">
+  <h1>Groups</h1>
+</div>
+
+<section class="card">
+  {{if .Groups}}
+  <ul class="list">
+    {{range .Groups}}
+    <li class="list-row">
+      <div class="list-col">
+        <a class="list-main" href="/groups/{{.Group.ID}}">{{.Group.Name}}</a>
+        <span class="list-sub">{{.Members}} member{{if ne .Members 1}}s{{end}}</span>
+      </div>
+      <span class="list-amount {{if lt .YourNet 0}}negative{{else if gt .YourNet 0}}positive{{end}}">
+        {{if eq .YourNet 0}}settled up{{else}}{{moneySigned .YourNet}}{{end}}
+      </span>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="muted">You're not in any groups yet. Create your first one below.</p>
+  {{end}}
+  <form method="post" action="/groups" class="row-form">
+    <input type="text" name="name" placeholder="New group name" required aria-label="New group name">
+    <button type="submit" class="btn btn-primary">Create group</button>
+  </form>
+</section>
+{{end}}

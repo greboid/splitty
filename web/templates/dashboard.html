@@ -1,0 +1,8 @@
+{{define "title"}}Dashboard{{end}}
+{{define "content"}}
+<div class="balance-hero card balance-center {{if not .TotalBalance}}balanced{{end}}">
+  <span class="balance-label">Total balance</span>
+  <span class="balance-big">{{if gt .TotalBalance 0}}You are owed{{else if lt .TotalBalance 0}}You owe{{else}}All settled up{{end}}</span>
+  {{if ne .TotalBalance 0}}<span class="balance-amount">{{money .TotalBalance}}</span>{{end}}
+</div>
+{{end}}

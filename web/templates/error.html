@@ -1,0 +1,8 @@
+{{define "title"}}Sorry{{end}}
+{{define "content"}}
+<div class="auth-card card error-card">
+  <h1>{{if eq .Message "Something went wrong on our side. Please try again."}}Something went wrong{{else}}Not found{{end}}</h1>
+  <p class="muted">{{.Message}}</p>
+  <a class="btn btn-primary" href="/">Back to the dashboard</a>
+</div>
+{{end}}

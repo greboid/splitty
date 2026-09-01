@@ -1,0 +1,118 @@
+{{define "title"}}{{if .Editing}}Edit expense{{else}}Add expense{{end}}{{end}}
+{{define "content"}}
+<div class="page-head">
+  <div>
+    <h1>{{if .Editing}}Edit expense{{else}}Add expense{{end}}</h1>
+    <p class="muted">{{.GroupName}}</p>
+  </div>
+  {{if .Drafting}}
+  <form method="post" action="/drafts/{{.DraftID}}/clear" class="js-confirm"
+        data-confirm="Clear this draft? Everything entered so far will be discarded.">
+    <button type="submit" class="btn btn-ghost">Clear draft</button>
+  </form>
+  {{end}}
+</div>
+
+<form method="post" id="expense-form"
+      action="{{if .Editing}}/expenses/{{.ExpenseID}}/edit{{else if .Drafting}}/drafts/{{.DraftID}}/submit{{end}}"
+      {{if .Drafting}}data-autosave="/drafts/{{.DraftID}}"{{end}}
+      class="expense-form card">
+  {{if .Error}}<p class="form-error" id="form-error">{{.Error}}</p>{{end}}
+
+  <div class="form-grid">
+    <div class="field span-2">
+      <label for="description">Description</label>
+      <input type="text" id="description" name="description" value="{{.Form.Description}}" required autofocus placeholder="Dinner at the pub">
+    </div>
+    <div class="field">
+      <label for="date">Date</label>
+      <input type="date" id="date" name="date" value="{{.Form.Date}}" required>
+    </div>
+    <div class="field">
+      <label for="category">Category</label>
+      <select id="category" name="category">
+        {{$cat := .Form.Category}}
+        {{range list "general" "groceries" "dining" "utilities" "rent" "travel" "entertainment" "shopping" "health" "other"}}
+        <option value="{{.}}"{{if eq $cat .}} selected{{end}}>{{title .}}</option>
+        {{end}}
+      </select>
+    </div>
+  </div>
+
+  <div id="form-dynamic" class="form-dynamic">
+    <!--
+      expense-form.js takes over this section (payers, split mode tabs,
+      participant rows, itemization) initialised from the JSON payload in
+      #form-payload below. Without JS, this no-JS fallback covers the
+      common case: one payer and an even split.
+    -->
+    <input type="hidden" name="split_mode" value="even">
+
+    <fieldset>
+      <legend>Paid by</legend>
+      <div class="payer-fallback">
+        <select name="payer_id_0" aria-label="Who paid">
+          {{$cur := .Form.Payers}}
+          {{range .Members}}
+          <option value="{{.ID}}"{{if and $cur (eq (index $cur 0).UserID .ID)}} selected{{end}}>{{.Name}}</option>
+          {{end}}
+        </select>
+        <input type="text" name="payer_amount_0" inputmode="decimal" placeholder="0.00" aria-label="Amount paid" required>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Split equally between</legend>
+      <div class="checkbox-grid">
+        {{range .Members}}
+        <label class="checkbox"><input type="checkbox" name="participant_{{.ID}}" checked> {{.Name}}</label>
+        {{end}}
+      </div>
+    </fieldset>
+  </div>
+
+  <div class="field">
+    <label for="notes">Notes <small>(optional)</small></label>
+    <textarea id="notes" name="notes" rows="2">{{.Form.Notes}}</textarea>
+  </div>
+
+  <input type="hidden" name="receipt_file" id="receipt-file" value="{{.Form.ReceiptFile}}">
+  {{if .ScanEnabled}}
+  <fieldset class="scan-section" id="scan-section"{{if .Drafting}} data-draft="{{.DraftID}}"{{end}}>
+    <legend>Receipt</legend>
+    <div class="scan-buttons">
+      <label class="btn btn-secondary">
+        Upload photo
+        <input type="file" accept="image/jpeg,image/png,image/webp" id="scan-upload" class="visually-hidden">
+      </label>
+      <label class="btn btn-secondary">
+        Take photo
+        <input type="file" accept="image/*" capture="environment" id="scan-camera" class="visually-hidden">
+      </label>
+    </div>
+    <p class="hint" id="scan-status"></p>
+    {{if .Form.ReceiptFile}}
+    <a href="/receipts/{{.Form.ReceiptFile}}"><img id="scan-preview" class="scan-preview" alt="Receipt preview" src="/receipts/{{.Form.ReceiptFile}}"></a>
+    {{else}}
+    <img id="scan-preview" class="scan-preview" alt="Receipt preview" hidden>
+    {{end}}
+  </fieldset>
+  {{else if .Form.ReceiptFile}}
+  <p class="hint">A <a href="/receipts/{{.Form.ReceiptFile}}">scanned receipt</a> is attached to this expense.</p>
+  {{end}}
+
+  <div class="form-footer">
+    {{if .Drafting}}<span class="form-hint" id="draft-status" aria-live="polite"></span>{{end}}
+    <span class="form-hint" id="remaining-hint"></span>
+    <button type="submit" class="btn btn-primary">{{.SubmitLabel}}</button>
+  </div>
+</form>
+
+<div id="form-payload" data-payload="{{.Payload}}" hidden></div>
+{{end}}
+
+{{define "scripts"}}
+<script type="module" src="{{static "/js/main.js"}}"></script>
+<script type="module" src="{{static "/js/expense-form.js"}}"></script>
+{{if .ScanEnabled}}<script type="module" src="{{static "/js/scan.js"}}"></script>{{end}}
+{{end}}
