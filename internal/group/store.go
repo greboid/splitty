@@ -37,13 +37,10 @@ func (s *Store) GroupName(id int64) (string, error) {
 }
 
 func (s *Store) Create(name, kind string, createdBy int64) (Group, error) {
-	res, err := s.DB.Exec(`INSERT INTO groups (name, kind, created_by) VALUES (?, ?, ?)`,
-		name, kind, createdBy)
-	if err != nil {
-		return Group{}, err
-	}
-	id, err := res.LastInsertId()
-	if err != nil {
+	var id int64
+	// RETURNING works on both SQLite and Postgres.
+	if err := s.DB.QueryRow(`INSERT INTO groups (name, kind, created_by) VALUES (?, ?, ?) RETURNING id`,
+		name, kind, createdBy).Scan(&id); err != nil {
 		return Group{}, err
 	}
 	return s.ByID(id)
@@ -150,7 +147,9 @@ func (s *Store) IsMember(groupID, userID int64) (bool, error) {
 }
 
 func (s *Store) AddMember(groupID, userID int64) error {
-	_, err := s.DB.Exec(`INSERT OR IGNORE INTO memberships (group_id, user_id) VALUES (?, ?)`, groupID, userID)
+	// ON CONFLICT (unlike INSERT OR IGNORE) runs on both SQLite and Postgres.
+	_, err := s.DB.Exec(`INSERT INTO memberships (group_id, user_id) VALUES (?, ?)
+		ON CONFLICT (group_id, user_id) DO NOTHING`, groupID, userID)
 	return err
 }
 

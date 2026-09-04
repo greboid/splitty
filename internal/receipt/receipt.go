@@ -1,6 +1,6 @@
-// Package receipt stores receipt images in the SQLite database and
-// extracts structured line items from them via a vision LLM
-// (OpenAI-compatible endpoints and the Anthropic Messages API).
+// Package receipt stores receipt images in the database and extracts
+// structured line items from them via a vision LLM (OpenAI-compatible
+// endpoints and the Anthropic Messages API).
 package receipt
 
 import (

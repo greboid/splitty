@@ -22,11 +22,11 @@ import (
 	"github.com/greboid/splitpayments/internal/activity"
 	"github.com/greboid/splitpayments/internal/auth"
 	"github.com/greboid/splitpayments/internal/config"
-	"github.com/greboid/splitpayments/internal/database"
 	"github.com/greboid/splitpayments/internal/expense"
 	"github.com/greboid/splitpayments/internal/group"
 	"github.com/greboid/splitpayments/internal/receipt"
 	"github.com/greboid/splitpayments/internal/render"
+	"github.com/greboid/splitpayments/internal/testdb"
 	"github.com/greboid/splitpayments/internal/user"
 	"github.com/greboid/splitpayments/web"
 )
@@ -42,16 +42,7 @@ type app struct {
 
 func newApp(t *testing.T) *app {
 	t.Helper()
-	// One connection keeps a private in-memory DB alive for this test only.
-	db, err := sql.Open("sqlite", "file::memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
-	db.SetMaxOpenConns(1)
-	if err := database.Migrate(db); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { db.Close() })
+	db := testdb.Open(t)
 
 	r, err := render.New(web.Templates(), "GBP", "£", false, web.AssetVersion())
 	if err != nil {
@@ -158,12 +149,8 @@ func (a *app) openDraft(t *testing.T, groupID int64) string {
 // createUser plants a bare user row, for a second identity in one app.
 func (a *app) createUser(t *testing.T, name string) int64 {
 	t.Helper()
-	res, err := a.db.Exec(`INSERT INTO users (name) VALUES (?)`, name)
-	if err != nil {
-		t.Fatal(err)
-	}
-	id, err := res.LastInsertId()
-	if err != nil {
+	var id int64
+	if err := a.db.QueryRow(`INSERT INTO users (name) VALUES (?) RETURNING id`, name).Scan(&id); err != nil {
 		t.Fatal(err)
 	}
 	return id

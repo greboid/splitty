@@ -43,19 +43,26 @@ func main() {
 }
 
 func run(cfg *config.Config) error {
-	// The database's parent directory must exist before SQLite opens it.
-	if dir := filepath.Dir(cfg.Database); dir != "." {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return err
+	driver, err := database.NormalizeDriver(cfg.DBDriver)
+	if err != nil {
+		return err
+	}
+	// The SQLite file's parent directory must exist before it is opened; a
+	// Postgres DSN is not a path.
+	if driver == "sqlite" {
+		if dir := filepath.Dir(cfg.Database); dir != "." {
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				return err
+			}
 		}
 	}
 
-	db, err := database.Open(cfg.Database)
+	db, err := database.Open(driver, cfg.Database)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
-	if err := database.Migrate(db); err != nil {
+	if err := database.Migrate(db, driver); err != nil {
 		return err
 	}
 
@@ -159,7 +166,7 @@ func run(cfg *config.Config) error {
 		httpServer.Shutdown(shutdownCtx)
 	}()
 
-	slog.Info("listening", "address", cfg.Listen, "currency", cfg.Currency)
+	slog.Info("listening", "address", cfg.Listen, "currency", cfg.Currency, "driver", driver)
 	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}

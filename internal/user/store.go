@@ -60,15 +60,12 @@ func (s *Store) Count() (int, error) {
 }
 
 func (s *Store) Create(u *User) error {
-	res, err := s.DB.Exec(
-		`INSERT INTO users (email, name, password_hash, is_guest, invited_by) VALUES (?, ?, ?, ?, ?)`,
+	// RETURNING works on both SQLite and Postgres (neither supports
+	// LastInsertId on Postgres).
+	return s.DB.QueryRow(
+		`INSERT INTO users (email, name, password_hash, is_guest, invited_by) VALUES (?, ?, ?, ?, ?) RETURNING id`,
 		nullString(u.Email), u.Name, nullString(u.PasswordHash), u.IsGuest, u.InvitedBy,
-	)
-	if err != nil {
-		return err
-	}
-	u.ID, err = res.LastInsertId()
-	return err
+	).Scan(&u.ID)
 }
 
 // UpdateCredentials upgrades a guest to a full account (or renames an

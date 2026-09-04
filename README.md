@@ -33,7 +33,8 @@ environment variable.
 | Flag | Environment variable | Default | Purpose |
 |---|---|---|---|
 | `-listen` | `LISTEN` | `:8080` | HTTP listen address |
-| `-database` | `DATABASE` | `data/splitpayments.db` | SQLite file path (receipt images are stored in it too) |
+| `-db-driver` | `DB_DRIVER` | `sqlite` | Database backend: `sqlite` (also `sqlite3`) or `postgres` (also `pg`/`postgresql`) |
+| `-database` | `DATABASE` | `data/splitpayments.db` | For SQLite, the database file path (receipt images are stored in it too); for Postgres, a libpq-style connection string |
 | `-static-dir` | `STATIC_DIR` | *(embedded)* | Serve assets from disk instead (dev) |
 | `-currency` | `CURRENCY` | `GBP` | Install-wide ISO 4217 currency code |
 | `-currency-symbol` | `CURRENCY_SYMBOL` | `£` | Symbol used in templates and the JS formatter |
@@ -49,6 +50,18 @@ environment variable.
 | `-cookie-secure` | `COOKIE_SECURE` | `true` | Set `false` for plain-HTTP local dev |
 | `--log.level` | `LOG_LEVEL` | `` | Lowest log level that should be output |
 | `--log.format` | `LOG_FORMAT` | `text` | Log format to output |
+
+### Database
+
+Data lives in SQLite by default (no external services needed). To run
+against Postgres instead, set the driver and a libpq-style connection
+string; the schema is created automatically on first start, and the
+database itself must already exist:
+
+```sh
+splitpayments -db-driver postgres \
+  -database 'postgres://user:password@db:5432/splitpayments?sslmode=disable'
+```
 
 ### Receipt scanning
 

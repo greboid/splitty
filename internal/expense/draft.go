@@ -42,10 +42,12 @@ func (s *Store) OpenDraft(userID, groupID int64) (Draft, error) {
 	if err != nil {
 		return d, err
 	}
-	// OR IGNORE: two tabs racing the first "Add expense" click; the loser
-	// simply re-reads the winner's draft below.
+	// ON CONFLICT (unlike INSERT OR IGNORE) runs on both SQLite and Postgres:
+	// two tabs racing the first "Add expense" click; the loser simply
+	// re-reads the winner's draft below.
 	if _, err := s.DB.Exec(
-		`INSERT OR IGNORE INTO expense_drafts (id, user_id, group_id) VALUES (?, ?, ?)`,
+		`INSERT INTO expense_drafts (id, user_id, group_id) VALUES (?, ?, ?)
+		ON CONFLICT (user_id, group_id) DO NOTHING`,
 		id, userID, groupID); err != nil {
 		return d, err
 	}

@@ -22,16 +22,12 @@ func (s *Store) Insert(e *Expense) error {
 	}
 	defer tx.Rollback()
 
-	res, err := tx.Exec(`
+	// RETURNING works on both SQLite and Postgres (LastInsertId does not).
+	if err := tx.QueryRow(`
 		INSERT INTO expenses (group_id, description, notes, category, date, is_payment, split_mode, receipt_file, created_by)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
 		e.GroupID, e.Description, e.Notes, e.Category, e.Date, e.IsPayment,
-		e.SplitMode, nullString(e.ReceiptFile), e.CreatedBy)
-	if err != nil {
-		return err
-	}
-	e.ID, err = res.LastInsertId()
-	if err != nil {
+		e.SplitMode, nullString(e.ReceiptFile), e.CreatedBy).Scan(&e.ID); err != nil {
 		return err
 	}
 	if err := insertShares(tx, e); err != nil {
@@ -76,8 +72,11 @@ func (s *Store) Update(e *Expense) error {
 
 func insertShares(tx *sql.Tx, e *Expense) error {
 	for _, sh := range e.Shares {
+		// ON CONFLICT (unlike INSERT OR REPLACE) runs on both SQLite and
+		// Postgres; the composite primary key guards the upsert.
 		if _, err := tx.Exec(
-			`INSERT OR REPLACE INTO expense_shares (expense_id, user_id, paid, owed) VALUES (?, ?, ?, ?)`,
+			`INSERT INTO expense_shares (expense_id, user_id, paid, owed) VALUES (?, ?, ?, ?)
+			ON CONFLICT (expense_id, user_id) DO UPDATE SET paid = EXCLUDED.paid, owed = EXCLUDED.owed`,
 			e.ID, sh.UserID, sh.Paid, sh.Owed); err != nil {
 			return err
 		}
@@ -87,19 +86,16 @@ func insertShares(tx *sql.Tx, e *Expense) error {
 
 func insertItems(tx *sql.Tx, e *Expense) error {
 	for pos, it := range e.Items {
-		res, err := tx.Exec(
-			`INSERT INTO expense_items (expense_id, position, description, amount) VALUES (?, ?, ?, ?)`,
-			e.ID, pos, it.Description, it.Amount)
-		if err != nil {
-			return err
-		}
-		itemID, err := res.LastInsertId()
-		if err != nil {
+		var itemID int64
+		if err := tx.QueryRow(
+			`INSERT INTO expense_items (expense_id, position, description, amount) VALUES (?, ?, ?, ?) RETURNING id`,
+			e.ID, pos, it.Description, it.Amount).Scan(&itemID); err != nil {
 			return err
 		}
 		for _, u := range it.Assignees {
 			if _, err := tx.Exec(
-				`INSERT OR REPLACE INTO item_shares (item_id, user_id) VALUES (?, ?)`, itemID, u); err != nil {
+				`INSERT INTO item_shares (item_id, user_id) VALUES (?, ?)
+				ON CONFLICT (item_id, user_id) DO NOTHING`, itemID, u); err != nil {
 				return err
 			}
 		}

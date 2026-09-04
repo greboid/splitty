@@ -3,7 +3,6 @@ package receipt
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"image"
@@ -19,7 +18,7 @@ import (
 	"time"
 
 	"github.com/greboid/splitpayments/internal/auth"
-	"github.com/greboid/splitpayments/internal/database"
+	"github.com/greboid/splitpayments/internal/testdb"
 	"github.com/greboid/splitpayments/internal/user"
 )
 
@@ -173,16 +172,7 @@ func TestAnalyzeGuards(t *testing.T) {
 // database. One connection keeps that private database alive.
 func mustStore(t *testing.T) *Store {
 	t.Helper()
-	db, err := sql.Open("sqlite", "file::memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { db.Close() })
-	db.SetMaxOpenConns(1)
-	if err := database.Migrate(db); err != nil {
-		t.Fatal(err)
-	}
-	return NewStore(db)
+	return NewStore(testdb.Open(t))
 }
 
 func TestScanAnthropic(t *testing.T) {

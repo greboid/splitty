@@ -1,5 +1,8 @@
-// Package database opens the SQLite database and applies embedded SQL
-// migrations using Goose, tracked in a goose_db_version table.
+// Package database opens the configured database backend (SQLite or
+// Postgres) and applies embedded SQL migrations using Goose, tracked in a
+// goose_db_version table. Store SQL is written once against the common
+// subset: the Postgres driver rewrites ? placeholders (see postgres.go) and
+// each dialect has its own migration files.
 package database
 
 import (
@@ -8,41 +11,77 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"strings"
 
 	"github.com/pressly/goose/v3"
+	"github.com/uptrace/bun/driver/pgdriver"
 
 	_ "modernc.org/sqlite"
 )
 
-//go:embed migrations/*.sql
+//go:embed migrations
 var migrationFS embed.FS
 
-// Open opens (creating if necessary) the SQLite database at path with WAL
-// journaling, foreign keys and a busy timeout enabled. The parent directory
-// must already exist.
-func Open(path string) (*sql.DB, error) {
-	dsn := "file:" + path + "?_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)"
-	db, err := sql.Open("sqlite", dsn)
-	if err != nil {
-		return nil, fmt.Errorf("open sqlite: %w", err)
+// NormalizeDriver maps a driver flag value (and its aliases) onto the
+// canonical "sqlite" or "postgres".
+func NormalizeDriver(driver string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(driver)) {
+	case "", "sqlite", "sqlite3":
+		return "sqlite", nil
+	case "postgres", "postgresql", "pg":
+		return "postgres", nil
+	default:
+		return "", fmt.Errorf("unsupported db driver %q (want sqlite or postgres)", driver)
 	}
-	// SQLite handles one writer at a time; serialise access through a single
-	// connection to avoid SQLITE_BUSY churn entirely.
-	db.SetMaxOpenConns(1)
+}
+
+// Open opens the database named by driver ("sqlite" or "postgres", as
+// returned by NormalizeDriver) at dsn: a file path for SQLite (created if
+// necessary, parent directory must exist) or a libpq-style connection string
+// for Postgres.
+func Open(driver, dsn string) (*sql.DB, error) {
+	driver, err := NormalizeDriver(driver)
+	if err != nil {
+		return nil, err
+	}
+	var db *sql.DB
+	switch driver {
+	case "postgres":
+		db = sql.OpenDB(&pgConnector{parent: pgdriver.NewConnector(pgdriver.WithDSN(dsn))})
+	default: // sqlite
+		name := "file:" + dsn + "?_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)"
+		db, err = sql.Open("sqlite", name)
+		if err != nil {
+			return nil, fmt.Errorf("open sqlite: %w", err)
+		}
+		// SQLite handles one writer at a time; serialise access through a
+		// single connection to avoid SQLITE_BUSY churn entirely.
+		db.SetMaxOpenConns(1)
+	}
 	if err := db.Ping(); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("ping sqlite: %w", err)
+		return nil, fmt.Errorf("ping %s: %w", driver, err)
 	}
 	return db, nil
 }
 
-// Migrate applies all pending embedded migrations via Goose.
-func Migrate(db *sql.DB) error {
-	fsys, err := fs.Sub(migrationFS, "migrations")
+// Migrate applies all pending embedded migrations for the driver via Goose.
+func Migrate(db *sql.DB, driver string) error {
+	driver, err := NormalizeDriver(driver)
+	if err != nil {
+		return err
+	}
+	dialect := goose.DialectSQLite3
+	dir := "migrations/sqlite"
+	if driver == "postgres" {
+		dialect = goose.DialectPostgres
+		dir = "migrations/postgres"
+	}
+	fsys, err := fs.Sub(migrationFS, dir)
 	if err != nil {
 		return fmt.Errorf("mount migrations: %w", err)
 	}
-	provider, err := goose.NewProvider(goose.DialectSQLite3, db, fsys)
+	provider, err := goose.NewProvider(dialect, db, fsys)
 	if err != nil {
 		return fmt.Errorf("create migration provider: %w", err)
 	}
