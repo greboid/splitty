@@ -6,6 +6,7 @@ package server
 import (
 	"database/sql"
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -34,6 +35,7 @@ type Server struct {
 	Users     *user.Store
 	Sessions  *auth.SessionStore
 	AuthH     *auth.Handlers
+	Invites   *auth.InviteStore
 	Groups    *group.Store
 	GroupH    *group.Handlers
 	Expenses  *expense.Store
@@ -429,8 +431,10 @@ func (s *Server) notFound(w http.ResponseWriter, r *http.Request) {
 }
 
 // friendsAdd serves POST /friends: resolve an identity to a user and open
-// (or reuse) the direct ledger with them. An email matches an existing
-// account; anything else becomes a name-only guest.
+// (or reuse) the direct ledger with them. An email that belongs to an
+// account links straight away; an unknown email gets an invite link — the
+// pending friend is created as an email-named placeholder that the invite
+// upgrades in place once claimed. Anything else becomes a name-only guest.
 func (s *Server) friendsAdd(w http.ResponseWriter, r *http.Request) {
 	u := auth.UserFrom(r)
 	ident := strings.TrimSpace(r.PostFormValue("identity"))
@@ -441,12 +445,22 @@ func (s *Server) friendsAdd(w http.ResponseWriter, r *http.Request) {
 
 	var friend user.User
 	if strings.Contains(ident, "@") {
-		existing, err := s.Users.ByEmail(ident)
-		if err != nil || existing.IsGuest || existing.ID == u.ID {
-			redirectFlash(w, r, "/friends", "No account has that email.", "error")
+		email := strings.ToLower(ident)
+		existing, err := s.Users.ByEmail(email)
+		switch {
+		case err == nil && existing.ID == u.ID:
+			redirectFlash(w, r, "/friends", "That's your own email address.", "error")
+			return
+		case err == nil && !existing.IsGuest:
+			friend = existing
+		default:
+			if err != nil && !errors.Is(err, user.ErrNotFound) {
+				http.Error(w, "database error", http.StatusInternalServerError)
+				return
+			}
+			s.inviteFriend(w, r, u, email)
 			return
 		}
-		friend = existing
 	} else {
 		guest, err := s.findOrCreateGuest(ident, u.ID)
 		if err != nil {
@@ -462,6 +476,50 @@ func (s *Server) friendsAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/friends/%d", friend.ID), http.StatusSeeOther)
+}
+
+// inviteFriend opens the ledger with a not-yet-registered email and flashes
+// an invite link for it. Re-adding the same email re-issues a fresh link
+// (e.g. when the first one was lost) without duplicating the friend.
+func (s *Server) inviteFriend(w http.ResponseWriter, r *http.Request, u *user.User, email string) {
+	friend, err := s.findOrCreateInvitedGuest(email, u.ID)
+	if err != nil {
+		http.Error(w, "database error", http.StatusInternalServerError)
+		return
+	}
+	ledger, err := s.Groups.DirectBetween(u.ID, friend.ID)
+	if err != nil {
+		slog.Error("direct ledger", "error", err)
+		http.Error(w, "database error", http.StatusInternalServerError)
+		return
+	}
+	token, err := s.Invites.Create(email, 0, u.ID)
+	if err != nil {
+		http.Error(w, "database error", http.StatusInternalServerError)
+		return
+	}
+	s.Activity.Append(ledger.ID, 0, u.ID, activity.MemberAdded, "An invite was sent to "+email)
+	link := baseURL(r) + "/invite/" + token
+	redirectFlash(w, r, "/friends", "Invite created — send this link: "+link, "ok")
+}
+
+// findOrCreateInvitedGuest resolves the placeholder friend for an invited
+// email, creating one named by the email if needed. Claiming the invite
+// later upgrades this same row to a full account, keeping the ledger.
+func (s *Server) findOrCreateInvitedGuest(email string, invitedBy int64) (user.User, error) {
+	existing, err := s.Users.ByEmail(email)
+	if err == nil {
+		return existing, nil
+	}
+	if !errors.Is(err, user.ErrNotFound) {
+		return user.User{}, err
+	}
+	g := user.User{Name: email, Email: email, IsGuest: true,
+		InvitedBy: sql.NullInt64{Int64: invitedBy, Valid: true}}
+	if err := s.Users.Create(&g); err != nil {
+		return user.User{}, err
+	}
+	return g, nil
 }
 
 // findOrCreateGuest resolves a guest by exact name, creating one if needed.
@@ -484,4 +542,16 @@ func (s *Server) findOrCreateGuest(name string, invitedBy int64) (user.User, err
 // redirectFlash mirrors the auth/group helpers without an import cycle.
 func redirectFlash(w http.ResponseWriter, r *http.Request, path, flash, kind string) {
 	http.Redirect(w, r, path+"?flash="+url.QueryEscape(flash)+"&flash-kind="+kind, http.StatusSeeOther)
+}
+
+// baseURL mirrors group.baseURL: scheme+host for invite links.
+func baseURL(r *http.Request) string {
+	scheme := "https"
+	if r.TLS == nil {
+		scheme = "http"
+	}
+	if fwd := r.Header.Get("X-Forwarded-Proto"); fwd != "" {
+		scheme = fwd
+	}
+	return scheme + "://" + r.Host
 }

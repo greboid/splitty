@@ -217,6 +217,13 @@ func (h *Handlers) Invite(w http.ResponseWriter, r *http.Request) {
 	}
 	if err == nil && existing.IsGuest {
 		d.Name = existing.Name
+		// Invited friends are named by their email until they claim it;
+		// offer the local part as the starting point for their name.
+		if d.Name == invite.Email {
+			if local, _, ok := strings.Cut(invite.Email, "@"); ok {
+				d.Name = local
+			}
+		}
 	}
 	h.renderInvite(w, http.StatusOK, d)
 }

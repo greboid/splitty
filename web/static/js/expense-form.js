@@ -273,7 +273,7 @@ function init(payload) {
         let sum = 0;
         for (const v of state.percent.values()) sum += Number(v) || 0;
         const rem = round2(100 - sum);
-        return remainingPiece(rem, true);
+        return remainingPiece(rem, 0, true);
       }
       case 'shares': {
         const entries = [...state.shares.entries()]

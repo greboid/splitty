@@ -139,6 +139,7 @@ func run(cfg *config.Config) error {
 		Users:     users,
 		Sessions:  sessions,
 		AuthH:     authHandlers,
+		Invites:   invites,
 		Groups:    groups,
 		GroupH:    groupHandlers,
 		Expenses:  expenses,

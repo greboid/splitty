@@ -395,6 +395,10 @@ func (h *Handlers) Settle(w http.ResponseWriter, r *http.Request) {
 		redirectFlash(w, r, groupURL(g.ID), "Choose who paid, who received, and a positive amount.", "error")
 		return
 	}
+	if fromID == toID {
+		redirectFlash(w, r, groupURL(g.ID), "The payer and the recipient must be different people.", "error")
+		return
+	}
 	if ok, _ := h.Store.IsMember(g.ID, fromID); !ok {
 		redirectFlash(w, r, groupURL(g.ID), "The payer must be a group member.", "error")
 		return

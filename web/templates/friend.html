@@ -2,7 +2,7 @@
 {{define "content"}}
 <div class="page-head">
   <div>
-    <h1>{{.Friend.Name}}{{if .Friend.IsGuest}} <span class="tag">guest</span>{{end}}</h1>
+    <h1>{{.Friend.Name}}{{if .Friend.IsGuest}} <span class="tag">{{if .Friend.Email}}invited{{else}}guest{{end}}</span>{{end}}</h1>
     <p class="muted">
       {{if and (eq .YouOwe 0) (eq .OwesYou 0)}}You're all settled up{{else if .YouOwe}}You owe {{money .YouOwe}}{{else}}{{.Friend.Name}} owes you {{money .OwesYou}}{{end}}
     </p>

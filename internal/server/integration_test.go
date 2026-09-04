@@ -59,6 +59,7 @@ func newApp(t *testing.T) *app {
 		Cfg:      config.Config{Currency: "GBP", CurrencySymbol: "£"},
 		Users:    users,
 		Sessions: sessions,
+		Invites:  invites,
 		AuthH: &auth.Handlers{Users: users, Sessions: sessions, Invites: invites,
 			Groups: groups, Activity: activityStore, Render: r},
 		Groups:   groups,
@@ -353,6 +354,28 @@ func TestGroupExpenseSimplifySettle(t *testing.T) {
 	}
 }
 
+func TestSettleRejectsSelfPayment(t *testing.T) {
+	a := newApp(t)
+	a.setupUser(t, "Alice", "alice@example.com", "password123")
+	a.postOK(t, "/groups", "name=Flat")
+	a.postOK(t, "/groups/1/members", "identity=Bob")
+
+	resp := a.post(t, "/groups/1/settle", "from=1&to=1&amount=10.00")
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("self settle: status %d, want 303", resp.StatusCode)
+	}
+	loc, _ := resp.Location()
+	if !strings.Contains(loc.Query().Get("flash"), "must be different") {
+		t.Fatalf("self settle flash: %q", loc.Query().Get("flash"))
+	}
+
+	// The rejected payment must not have been recorded.
+	_, body := a.get(t, "/groups/1")
+	if strings.Contains(body, "Payment from") {
+		t.Error("self payment should not be recorded")
+	}
+}
+
 func TestInviteFlow(t *testing.T) {
 	a := newApp(t)
 	a.setupUser(t, "Alice", "alice@example.com", "password123")
@@ -455,6 +478,78 @@ func TestGuestUpgradeViaInvite(t *testing.T) {
 	}
 	if count != 3 {
 		t.Errorf("group should have 3 members, has %d", count)
+	}
+}
+
+// Inviting an external (not yet registered) email from the friends page:
+// it creates an invited placeholder friend and hands back a claim link;
+// claiming upgrades the placeholder in place, keeping the direct ledger.
+func TestFriendInviteFlow(t *testing.T) {
+	a := newApp(t)
+	a.setupUser(t, "Alice", "alice@example.com", "password123")
+
+	// Your own email is rejected outright.
+	resp := a.postOK(t, "/friends", "identity=alice@example.com")
+	if loc, _ := resp.Location(); !strings.Contains(loc.Query().Get("flash"), "own email") {
+		t.Fatalf("self invite flash: %q", loc.Query().Get("flash"))
+	}
+
+	// An unknown email becomes an invited friend with a shareable link.
+	resp = a.postOK(t, "/friends", "identity=Frank@Example.com")
+	loc, _ := resp.Location()
+	flash := loc.Query().Get("flash")
+	idx := strings.Index(flash, "/invite/")
+	if idx < 0 {
+		t.Fatalf("expected invite link in flash %q", flash)
+	}
+	token := strings.TrimPrefix(flash[idx:], "/invite/")
+
+	_, friendsBody := a.get(t, "/friends")
+	if !strings.Contains(friendsBody, "frank@example.com") || !strings.Contains(friendsBody, "invited") {
+		t.Error("friends page should list the placeholder as invited")
+	}
+
+	// Re-adding the same email re-issues a link without duplicating them.
+	if resp := a.postOK(t, "/friends", "identity=frank@example.com"); resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("re-invite: %d", resp.StatusCode)
+	}
+	var n int
+	if err := a.db.QueryRow(`SELECT COUNT(*) FROM users WHERE email = 'frank@example.com'`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Errorf("re-invite created %d users, want 1", n)
+	}
+
+	// The claim form prefills the email's local part as the name and the
+	// claim upgrades the placeholder in place.
+	code, claimPage := a.get(t, "/invite/"+token)
+	if code != 200 || !strings.Contains(claimPage, "Claim your account") || !strings.Contains(claimPage, `value="frank"`) {
+		t.Fatalf("invite page: %d", code)
+	}
+	a.postOK(t, "/invite/"+token, "name=Frank&password=frankpass1")
+
+	var isGuest bool
+	var frankID int64
+	if err := a.db.QueryRow(`SELECT is_guest, id FROM users WHERE email = 'frank@example.com'`).Scan(&isGuest, &frankID); err != nil {
+		t.Fatal(err)
+	}
+	if isGuest {
+		t.Error("claimed friend should be a full account")
+	}
+
+	// Frank now has an account with Alice as his friend.
+	a.loginAs(t, frankID)
+	code, body := a.get(t, "/friends")
+	if code != 200 || !strings.Contains(body, "Alice") {
+		t.Errorf("new user should see Alice as a friend: %d", code)
+	}
+
+	// And Alice sees Frank as a full account, no longer marked invited.
+	a.loginAs(t, 1)
+	_, friendsBody = a.get(t, "/friends")
+	if strings.Contains(friendsBody, "invited") {
+		t.Error("claimed friend should no longer be marked invited")
 	}
 }
 

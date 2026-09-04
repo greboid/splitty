@@ -9,7 +9,7 @@
   <ul class="list">
     {{range .Friends}}
     <li class="list-row">
-      <a class="list-main" href="/friends/{{.User.ID}}">{{.User.Name}}{{if .User.IsGuest}} <span class="tag">guest</span>{{end}}</a>
+      <a class="list-main" href="/friends/{{.User.ID}}">{{.User.Name}}{{if .User.IsGuest}} <span class="tag">{{if .User.Email}}invited{{else}}guest{{end}}</span>{{end}}</a>
       <span class="list-amount {{if .YouOwe}}negative{{else if .OwesYou}}positive{{end}}">
         {{if .YouOwe}}you owe {{money .YouOwe}}{{else if .OwesYou}}owes you {{money .OwesYou}}{{else}}settled up{{end}}
       </span>
@@ -23,6 +23,6 @@
     <input type="text" name="identity" placeholder="Friend's email or name" required aria-label="Friend's email or name">
     <button type="submit" class="btn btn-primary">Add friend</button>
   </form>
-  <p class="hint">An email adds an existing account; any other name creates a name-only guest you can track balances with.</p>
+  <p class="hint">An email adds an existing account, or creates an invite link you can send them to register; any other name creates a name-only guest you can track balances with.</p>
 </section>
 {{end}}
