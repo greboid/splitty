@@ -35,7 +35,7 @@ type Config struct {
 func Register(fs *flag.FlagSet) *Config {
 	c := &Config{}
 	fs.StringVar(&c.Listen, "listen", ":8080", "HTTP listen address")
-	fs.StringVar(&c.DBDriver, "db-driver", "sqlite", "database backend: sqlite (also sqlite3) or postgres (also pg/postgresql)")
+	fs.StringVar(&c.DBDriver, "db-driver", "", "database backend: sqlite (also sqlite3) or postgres (also pg/postgresql); empty auto-detects from -database (a postgres:// URL or libpq key=value string means postgres, anything else SQLite)")
 	fs.StringVar(&c.Database, "database", "data/splitpayments.db", "for SQLite, the database file path (receipt images are stored in it too); for Postgres, a libpq-style connection string")
 	fs.StringVar(&c.StaticDir, "static-dir", "", "Serve static assets from this directory instead of the embedded copies (dev only)")
 	fs.StringVar(&c.Currency, "currency", "GBP", "Install-wide ISO 4217 currency code")

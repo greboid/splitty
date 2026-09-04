@@ -43,7 +43,7 @@ func main() {
 }
 
 func run(cfg *config.Config) error {
-	driver, err := database.NormalizeDriver(cfg.DBDriver)
+	driver, err := database.ResolveDriver(cfg.DBDriver, cfg.Database)
 	if err != nil {
 		return err
 	}

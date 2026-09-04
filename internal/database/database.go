@@ -11,10 +11,10 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"regexp"
 	"strings"
 
 	"github.com/pressly/goose/v3"
-	"github.com/uptrace/bun/driver/pgdriver"
 
 	_ "modernc.org/sqlite"
 )
@@ -35,6 +35,32 @@ func NormalizeDriver(driver string) (string, error) {
 	}
 }
 
+// ResolveDriver picks the backend for a run: the driver flag when given,
+// otherwise detected from the DSN — a postgres:// URL or a libpq key=value
+// string means Postgres, anything else is a SQLite file path.
+func ResolveDriver(driver, dsn string) (string, error) {
+	if strings.TrimSpace(driver) == "" {
+		if looksLikePostgresDSN(dsn) {
+			return "postgres", nil
+		}
+		return "sqlite", nil
+	}
+	return NormalizeDriver(driver)
+}
+
+// looksLikePostgresDSN reports whether dsn is in a form only Postgres
+// understands.
+func looksLikePostgresDSN(dsn string) bool {
+	low := strings.ToLower(dsn)
+	if strings.HasPrefix(low, "postgres://") || strings.HasPrefix(low, "postgresql://") {
+		return true
+	}
+	// Key/value form: host=… dbname=…
+	return dsnRegexp.MatchString(dsn)
+}
+
+var dsnRegexp = regexp.MustCompile(`(?:^|\s)(?:host|dbname)=\S`)
+
 // Open opens the database named by driver ("sqlite" or "postgres", as
 // returned by NormalizeDriver) at dsn: a file path for SQLite (created if
 // necessary, parent directory must exist) or a libpq-style connection string
@@ -47,7 +73,7 @@ func Open(driver, dsn string) (*sql.DB, error) {
 	var db *sql.DB
 	switch driver {
 	case "postgres":
-		db = sql.OpenDB(&pgConnector{parent: pgdriver.NewConnector(pgdriver.WithDSN(dsn))})
+		db, err = openPostgres(dsn)
 	default: // sqlite
 		name := "file:" + dsn + "?_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)"
 		db, err = sql.Open("sqlite", name)

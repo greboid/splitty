@@ -2,7 +2,10 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"database/sql/driver"
+	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -42,6 +45,45 @@ func (rebindDriver) Open(name string) (driver.Conn, error) {
 	}
 	return rebindConn{Conn: cn}, nil
 }
+
+// openPostgres opens a libpq-style connection string with sslmode=prefer
+// semantics: pgdriver attempts TLS by default and refuses a server without
+// it, so when the DSN does not pick an sslmode explicitly, a rejected TLS
+// attempt falls back to plaintext — the norm for self-hosted containers.
+// An explicit sslmode is always honoured as given.
+func openPostgres(dsn string) (*sql.DB, error) {
+	db := sql.OpenDB(&pgConnector{parent: pgdriver.NewConnector(pgdriver.WithDSN(dsn))})
+	err := db.Ping()
+	if err == nil {
+		return db, nil
+	}
+	if sslModeSpecified(dsn) || !strings.Contains(err.Error(), "SSL is not enabled on the server") {
+		db.Close()
+		return nil, err
+	}
+	db.Close()
+	tlsDisabled := pgdriver.NewConnector(pgdriver.WithDSN(dsn), pgdriver.WithTLSConfig(nil))
+	db = sql.OpenDB(&pgConnector{parent: tlsDisabled})
+	if err := db.Ping(); err != nil {
+		db.Close()
+		return nil, err
+	}
+	return db, nil
+}
+
+// sslModeSpecified reports whether the DSN picks a TLS mode itself (URL
+// query parameter or key=value form), including sslrootcert which pgdriver
+// also treats as a TLS choice.
+func sslModeSpecified(dsn string) bool {
+	if u, err := url.Parse(dsn); err == nil &&
+		(u.Scheme == "postgres" || u.Scheme == "postgresql") {
+		q := u.Query()
+		return q.Has("sslmode") || q.Has("sslrootcert")
+	}
+	return sslModeRegexp.MatchString(dsn)
+}
+
+var sslModeRegexp = regexp.MustCompile(`(?:^|\s)(?:sslmode|sslrootcert)=\S`)
 
 // rebindConn delegates everything to the pgdriver connection, rewriting
 // queries first. database/sql only calls the ExecContext/QueryContext paths

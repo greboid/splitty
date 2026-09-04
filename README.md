@@ -33,7 +33,7 @@ environment variable.
 | Flag | Environment variable | Default | Purpose |
 |---|---|---|---|
 | `-listen` | `LISTEN` | `:8080` | HTTP listen address |
-| `-db-driver` | `DB_DRIVER` | `sqlite` | Database backend: `sqlite` (also `sqlite3`) or `postgres` (also `pg`/`postgresql`) |
+| `-db-driver` | `DB_DRIVER` | *(auto)* | Database backend: `sqlite` (also `sqlite3`) or `postgres` (also `pg`/`postgresql`); empty auto-detects from `-database` |
 | `-database` | `DATABASE` | `data/splitpayments.db` | For SQLite, the database file path (receipt images are stored in it too); for Postgres, a libpq-style connection string |
 | `-static-dir` | `STATIC_DIR` | *(embedded)* | Serve assets from disk instead (dev) |
 | `-currency` | `CURRENCY` | `GBP` | Install-wide ISO 4217 currency code |
@@ -53,15 +53,21 @@ environment variable.
 
 ### Database
 
-Data lives in SQLite by default (no external services needed). To run
-against Postgres instead, set the driver and a libpq-style connection
-string; the schema is created automatically on first start, and the
-database itself must already exist:
+Data lives in SQLite by default (no external services needed). Pointing
+`-database` at a `postgres://` connection string (or a libpq `host=… dbname=…`
+string) is enough to switch to Postgres — the backend is detected from the
+connection string, and `-db-driver` is only needed to override it. The schema
+is created automatically on first start; the database itself must already
+exist:
 
 ```sh
-splitpayments -db-driver postgres \
-  -database 'postgres://user:password@db:5432/splitpayments?sslmode=disable'
+splitpayments -database 'postgres://user:password@db:5432/splitpayments'
 ```
+
+TLS follows libpq's `prefer` behaviour when the connection string names no
+`sslmode`: TLS is attempted and falls back to plaintext if the server does
+not support it. Set `sslmode=require` (or `disable`) in the connection
+string to pin the choice.
 
 ### Receipt scanning
 
