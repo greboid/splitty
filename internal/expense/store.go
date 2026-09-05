@@ -71,7 +71,24 @@ func (s *Store) Update(e *Expense) error {
 }
 
 func insertShares(tx *sql.Tx, e *Expense) error {
+	// One row per user must carry both sides (paid and owed). Merge any
+	// duplicate-user rows first: the upsert below overwrites on conflict, so
+	// writing {paid} and {owed} as separate rows would silently drop the
+	// paid half (the self-payment bug).
+	merged := map[int64]*Share{}
+	order := make([]int64, 0, len(e.Shares))
 	for _, sh := range e.Shares {
+		m, ok := merged[sh.UserID]
+		if !ok {
+			m = &Share{UserID: sh.UserID}
+			merged[sh.UserID] = m
+			order = append(order, sh.UserID)
+		}
+		m.Paid += sh.Paid
+		m.Owed += sh.Owed
+	}
+	for _, uid := range order {
+		sh := merged[uid]
 		// ON CONFLICT (unlike INSERT OR REPLACE) runs on both SQLite and
 		// Postgres; the composite primary key guards the upsert.
 		if _, err := tx.Exec(

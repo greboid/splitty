@@ -7,8 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
+	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/greboid/splitpayments/internal/activity"
 	"github.com/greboid/splitpayments/internal/auth"
@@ -33,6 +36,7 @@ type formPage struct {
 	Form        ExpenseForm
 	Editing     bool
 	ExpenseID   int64
+	IsPayment   bool   // editing a settle-up payment: the form gets a hint
 	Drafting    bool   // new-expense flow: the form autosaves to a draft
 	DraftID     string // set when Drafting
 	Payload     string // JSON for the JS editor
@@ -254,6 +258,12 @@ func (h *Handlers) Edit(w http.ResponseWriter, r *http.Request) {
 		}
 		form := ParseExpenseForm(r.PostForm, memberIDs)
 		updated, errMsg := h.buildExpense(&form, memberIDs, e.GroupID, e.CreatedBy)
+		if errMsg == "" && e.IsPayment && !updated.IsValidPaymentShape() {
+			// A save that would recompute the payment as a split (e.g. the
+			// no-JS fallback, or switching tabs) would silently rewrite the
+			// ledger; keep payments payments.
+			errMsg = "A settle-up payment records one person paying another: keep a single payer and one exact amount for the recipient."
+		}
 		if errMsg == "" {
 			updated.ID = e.ID
 			updated.IsPayment = e.IsPayment
@@ -262,15 +272,23 @@ func (h *Handlers) Edit(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "database error", http.StatusInternalServerError)
 				return
 			}
+			names := map[int64]string{}
+			for _, m := range members {
+				names[m.ID] = m.Name
+			}
+			detail := changeSummary(e, *updated, names, h.common(r, u).Symbol)
+			if detail == "" {
+				detail = "no changes"
+			}
 			h.Activity.Append(e.GroupID, e.ID, u.ID, activity.ExpenseUpdated,
-				fmt.Sprintf("%s updated “%s” (%s)", u.Name, updated.Description, money.Format(updated.Total(), h.common(r, u).Symbol)))
+				fmt.Sprintf("%s updated “%s” (%s)", u.Name, updated.Description, detail))
 			http.Redirect(w, r, fmt.Sprintf("/expenses/%d", e.ID), http.StatusSeeOther)
 			return
 		}
 		page := formPage{
 			Common: h.common(r, u), GroupID: e.GroupID, GroupName: groupName,
 			Members: members, Form: form, Editing: true, ExpenseID: e.ID,
-			Error: errMsg, SubmitLabel: "Save changes",
+			IsPayment: e.IsPayment, Error: errMsg, SubmitLabel: "Save changes",
 		}
 		page.Payload = buildPayload(page.Form, members, page.Symbol)
 		h.Render.Render(w, http.StatusUnprocessableEntity, "expense-form.html", page)
@@ -280,13 +298,18 @@ func (h *Handlers) Edit(w http.ResponseWriter, r *http.Request) {
 	form := formFromExpense(e, memberIDs)
 	page := formPage{
 		Common: h.common(r, u), GroupID: e.GroupID, GroupName: groupName,
-		Members: members, Form: form, Editing: true, ExpenseID: e.ID, SubmitLabel: "Save changes",
+		Members: members, Form: form, Editing: true, ExpenseID: e.ID,
+		IsPayment: e.IsPayment, SubmitLabel: "Save changes",
 	}
 	page.Payload = buildPayload(page.Form, members, page.Symbol)
 	h.Render.Render(w, http.StatusOK, "expense-form.html", page)
 }
 
 // formFromExpense reconstructs an editable form from a stored expense.
+// Payments are presented in exact mode (payer + the recipient's exact
+// amount) rather than the even split they are stored with, so saving an
+// untouched form reproduces the same payer→recipient rows instead of
+// recomputing the transfer as a 50/50 split.
 func formFromExpense(e Expense, memberIDs []int64) ExpenseForm {
 	f := ExpenseForm{
 		Description:  e.Description,
@@ -303,11 +326,14 @@ func formFromExpense(e Expense, memberIDs []int64) ExpenseForm {
 	if f.Mode == "" {
 		f.Mode = SplitExact
 	}
+	if e.IsPayment {
+		f.Mode = SplitExact
+	}
 	for _, s := range e.Shares {
 		if s.Paid > 0 {
 			f.Payers = append(f.Payers, FormPayer{UserID: s.UserID, Amount: formatAmount(s.Paid)})
 		}
-		if e.SplitMode == SplitEven {
+		if e.SplitMode == SplitEven && !e.IsPayment {
 			f.Participants[s.UserID] = true
 		} else if s.Owed > 0 {
 			f.Exact[s.UserID] = formatAmount(s.Owed)
@@ -332,6 +358,91 @@ func formatAmount(v int64) string {
 		return ""
 	}
 	return money.Format(v, "")
+}
+
+// changeSummary describes what an edit changed, for the activity feed
+// entry: renamed/description, date, category, notes, amount, payer and
+// recipient/split. Empty when nothing observable changed.
+func changeSummary(oldE, newE Expense, names map[int64]string, symbol string) string {
+	var parts []string
+	if oldE.Description != newE.Description {
+		parts = append(parts, fmt.Sprintf("renamed from “%s”", oldE.Description))
+	}
+	if oldE.Date != newE.Date {
+		parts = append(parts, "date → "+newE.Date)
+	}
+	if oldE.Category != newE.Category {
+		parts = append(parts, "category → "+newE.Category)
+	}
+	if oldE.Notes != newE.Notes {
+		parts = append(parts, "notes changed")
+	}
+	if oldE.Total() != newE.Total() {
+		parts = append(parts, fmt.Sprintf("amount %s → %s",
+			money.Format(oldE.Total(), symbol), money.Format(newE.Total(), symbol)))
+	}
+	if diff := userSideDiff(paidBy(oldE.Shares), paidBy(newE.Shares), names); diff != "" {
+		parts = append(parts, "payer "+diff)
+	}
+	if newE.IsPayment {
+		if diff := userSideDiff(owedBy(oldE.Shares), owedBy(newE.Shares), names); diff != "" {
+			parts = append(parts, "recipient "+diff)
+		}
+	} else if oldE.Total() == newE.Total() && !maps.Equal(owedBy(oldE.Shares), owedBy(newE.Shares)) {
+		// Same people, different shares of an unchanged total.
+		parts = append(parts, "split changed")
+	}
+	return strings.Join(parts, ", ")
+}
+
+// userSideDiff describes a change in who holds one side of the shares:
+// "A → B" for a single-person swap, "changed" for any other reshuffle, ""
+// when the same users are involved.
+func userSideDiff(oldM, newM map[int64]int64, names map[int64]string) string {
+	if slices.Equal(userIDs(oldM), userIDs(newM)) {
+		return ""
+	}
+	if len(oldM) == 1 && len(newM) == 1 {
+		var from, to int64
+		for id := range oldM {
+			from = id
+		}
+		for id := range newM {
+			to = id
+		}
+		return names[from] + " → " + names[to]
+	}
+	return "changed"
+}
+
+// paidBy / owedBy collapse share rows into per-user side totals.
+func paidBy(shares []Share) map[int64]int64 {
+	m := map[int64]int64{}
+	for _, s := range shares {
+		if s.Paid != 0 {
+			m[s.UserID] += s.Paid
+		}
+	}
+	return m
+}
+
+func owedBy(shares []Share) map[int64]int64 {
+	m := map[int64]int64{}
+	for _, s := range shares {
+		if s.Owed != 0 {
+			m[s.UserID] += s.Owed
+		}
+	}
+	return m
+}
+
+func userIDs(m map[int64]int64) []int64 {
+	out := make([]int64, 0, len(m))
+	for id := range m {
+		out = append(out, id)
+	}
+	sortInt64s(out)
+	return out
 }
 
 // Detail serves GET /expenses/{id}.

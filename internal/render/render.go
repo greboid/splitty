@@ -59,6 +59,7 @@ type Common struct {
 	Flash       string
 	FlashKind   string // "ok" or "error"
 	Nav         Nav    // sidebar lists; empty on anonymous pages
+	Version     string // VCS revision of the running binary; empty if unknown
 }
 
 // User is the minimal view of the logged-in user needed by templates.
@@ -73,13 +74,15 @@ type Renderer struct {
 	currency    string
 	symbol      string
 	scanEnabled bool
+	version     string
 }
 
 // New parses layout.html, all partials (_*.html) and each page (*.html) into
 // per-page template sets. assetVersion, when non-empty, is appended to
 // /static URLs via the "static" template func so browsers can cache assets
-// immutably and still pick up new versions after a rebuild.
-func New(fsys fs.FS, currency, symbol string, scanEnabled bool, assetVersion string) (*Renderer, error) {
+// immutably and still pick up new versions after a rebuild. version, when
+// non-empty, is shown at the bottom of the sidebar.
+func New(fsys fs.FS, currency, symbol string, scanEnabled bool, assetVersion, version string) (*Renderer, error) {
 	funcs := template.FuncMap{
 		"money": func(v int64) string { return format(v, symbol) },
 		"moneySigned": func(v int64) string {
@@ -107,6 +110,7 @@ func New(fsys fs.FS, currency, symbol string, scanEnabled bool, assetVersion str
 		currency:    currency,
 		symbol:      symbol,
 		scanEnabled: scanEnabled,
+		version:     version,
 	}
 
 	pages, err := fs.Glob(fsys, "*.html")
@@ -142,6 +146,7 @@ func (r *Renderer) CommonFrom(req *http.Request, currentUser *User) Common {
 		Symbol:      r.symbol,
 		ScanEnabled: r.scanEnabled,
 		Path:        req.URL.Path,
+		Version:     r.version,
 	}
 	if currentUser != nil {
 		c.CurrentUser = *currentUser

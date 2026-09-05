@@ -135,6 +135,13 @@ h3 { font-size: 0.95rem; margin: 0 0 0.35rem; }
 .sidenav-item:hover { background: var(--bg); text-decoration: none; }
 .sidenav-item[aria-current="page"] { background: var(--primary-soft); color: var(--primary-dark); }
 .sidenav-empty { color: var(--muted); font-size: 0.85rem; margin: 0.25rem 0 0; padding: 0 0.6rem; }
+.sidenav-version {
+  margin-top: auto;
+  padding: 0 0.6rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
 
 /* Sidebar "+" add buttons: a <details> drop-down form, no JS needed */
 .nav-add { position: relative; }

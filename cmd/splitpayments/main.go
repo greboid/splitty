@@ -28,6 +28,7 @@ import (
 	"github.com/greboid/splitpayments/internal/render"
 	"github.com/greboid/splitpayments/internal/server"
 	"github.com/greboid/splitpayments/internal/user"
+	"github.com/greboid/splitpayments/internal/version"
 	"github.com/greboid/splitpayments/web"
 )
 
@@ -74,7 +75,12 @@ func run(cfg *config.Config) error {
 	scanEnabled := cfg.ReceiptAPIURL != "" &&
 		(cfg.ReceiptModel != "" || (cfg.ReceiptAPIWorkflow != "" &&
 			(cfg.ReceiptAPIFormat == receipt.FormatGWTYPE2 || cfg.ReceiptAPIFormat == receipt.FormatGWTYPE3)))
-	r, err := render.New(templateFS, cfg.Currency, cfg.CurrencySymbol, scanEnabled, web.AssetVersion())
+	// go run doesn't stamp VCS info, so dev runs show "dev".
+	appVersion := "dev"
+	if v, ok := version.Get(); ok {
+		appVersion = v.String()
+	}
+	r, err := render.New(templateFS, cfg.Currency, cfg.CurrencySymbol, scanEnabled, web.AssetVersion(), appVersion)
 	if err != nil {
 		return err
 	}

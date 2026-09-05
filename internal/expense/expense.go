@@ -19,10 +19,12 @@ const (
 	SplitItemized = "itemized"
 )
 
-// Categories offered in the form; stored as plain strings.
+// Categories offered in the form; stored as plain strings. "payment" is
+// valid (settle-up payments carry it) but hidden from the picker: users
+// don't create payments as expenses.
 var Categories = []string{
 	"general", "groceries", "dining", "utilities", "rent",
-	"travel", "entertainment", "shopping", "health", "other",
+	"travel", "entertainment", "shopping", "health", "other", "payment",
 }
 
 type Share struct {
@@ -77,6 +79,24 @@ func (e Expense) Payers() []Share {
 		}
 	}
 	return out
+}
+
+// IsValidPaymentShape reports whether shares encode a settle-up payment:
+// exactly one payer and one recipient contributing equal amounts. A
+// self-payment merges into a single row and counts as valid (a no-op).
+func (e Expense) IsValidPaymentShape() bool {
+	var payers, recipients, paidTotal, owedTotal int64
+	for _, s := range e.Shares {
+		if s.Paid > 0 {
+			payers++
+			paidTotal += s.Paid
+		}
+		if s.Owed > 0 {
+			recipients++
+			owedTotal += s.Owed
+		}
+	}
+	return payers == 1 && recipients == 1 && paidTotal == owedTotal
 }
 
 // OwedBy returns the owed amount for a user (0 when absent).

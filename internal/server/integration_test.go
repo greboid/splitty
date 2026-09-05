@@ -44,7 +44,7 @@ func newApp(t *testing.T) *app {
 	t.Helper()
 	db := testdb.Open(t)
 
-	r, err := render.New(web.Templates(), "GBP", "£", false, web.AssetVersion())
+	r, err := render.New(web.Templates(), "GBP", "£", false, web.AssetVersion(), "test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -373,6 +373,154 @@ func TestSettleRejectsSelfPayment(t *testing.T) {
 	_, body := a.get(t, "/groups/1")
 	if strings.Contains(body, "Payment from") {
 		t.Error("self payment should not be recorded")
+	}
+}
+
+// Paying for something and allocating all of it to yourself must be a
+// balance no-op: your paid and owed sides cancel in every split mode, and
+// no suggested payments appear.
+func TestSelfAllocationNetsToZero(t *testing.T) {
+	cases := []struct{ name, split string }{
+		{"even", "participant_1=on"},
+		{"exact", "exact_1=30.00"},
+		{"percent", "percent_1=100"},
+		{"shares", "shares_1=1"},
+		{"itemized", "item_desc_0=Thing&item_amount_0=30.00&item_people_0=1"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := newApp(t)
+			a.setupUser(t, "Alice", "alice@example.com", "password123")
+			a.postOK(t, "/groups", "name=Flat")
+			a.postOK(t, "/groups/1/members", "identity=Bob")
+
+			draft := a.openDraft(t, 1)
+			a.postOK(t, draft+"/submit", strings.Join([]string{
+				"description=Just+me&date=2026-09-05&split_mode=" + tc.name,
+				"payer_id_0=1", "payer_amount_0=30.00", tc.split,
+			}, "&"))
+
+			_, body := a.get(t, "/groups/1")
+			if n := strings.Count(body, "settled up"); n != 2 {
+				t.Errorf("self-allocated expense moved balances (%d members settled up):\n%s", n, body)
+			}
+			if strings.Contains(body, "Suggested payments") || strings.Contains(body, "owes £") || strings.Contains(body, "gets £") {
+				t.Errorf("self-allocated expense should not create debts:\n%s", body)
+			}
+		})
+	}
+}
+
+// Editing a settle-up payment must round-trip faithfully: the form presents
+// the payment as payer + exact amount, saving it as rendered keeps the
+// ledger identical (it must not be recomputed as an even split), and the
+// activity entry says what changed.
+func TestEditPaymentRoundTrip(t *testing.T) {
+	a := newApp(t)
+	a.setupUser(t, "Alice", "alice@example.com", "password123")
+	a.postOK(t, "/groups", "name=Flat")
+	a.postOK(t, "/groups/1/members", "identity=Bob")
+
+	// Alice pays 30 split evenly with Bob; Bob settles his 15.
+	draft := a.openDraft(t, 1)
+	a.postOK(t, draft+"/submit", "description=Dinner&date=2026-09-05&split_mode=even&payer_id_0=1&payer_amount_0=30.00&participant_1=on&participant_2=on")
+	a.postOK(t, "/groups/1/settle", "from=2&to=1&amount=15.00")
+	_, body := a.get(t, "/groups/1")
+	if n := strings.Count(body, "settled up"); n != 2 {
+		t.Fatalf("setup left balances unsettled:\n%s", body)
+	}
+
+	// The payment edit form carries the payment hint and pre-fills the
+	// payment as payer Bob 15.00 + exact 15.00 for Alice (in the JSON
+	// payload the JS editor reads; quotes are HTML-escaped there).
+	_, editBody := a.get(t, "/expenses/2/edit")
+	for _, want := range []string{
+		"settle-up payment",
+		`name="payer_id_0"`,
+		"&#34;mode&#34;:&#34;exact&#34;",
+		"&#34;amount&#34;:&#34;15.00&#34;",
+		"&#34;exact&#34;:{&#34;1&#34;:&#34;15.00&#34;}",
+	} {
+		if !strings.Contains(editBody, want) {
+			t.Errorf("payment edit form missing %q", want)
+		}
+	}
+
+	// Save the form as rendered, plus a notes tweak.
+	a.postOK(t, "/expenses/2/edit", strings.Join([]string{
+		"description=Payment+from+Bob+to+Alice", "date=2026-09-05", "category=payment",
+		"split_mode=exact", "payer_id_0=2", "payer_amount_0=15.00", "exact_1=15.00",
+		"notes=adjusted",
+	}, "&"))
+
+	// The ledger is unchanged.
+	_, body = a.get(t, "/groups/1")
+	if n := strings.Count(body, "settled up"); n != 2 {
+		t.Errorf("editing the payment moved the balances:\n%s", body)
+	}
+
+	// The activity entry says what changed.
+	_, actBody := a.get(t, "/activity")
+	if !strings.Contains(actBody, "notes changed") {
+		t.Errorf("activity entry should describe the change:\n%s", actBody)
+	}
+}
+
+// A payment edit that would rewrite the payment as a shared split is
+// rejected: the stored payment and the balances stay intact.
+func TestEditPaymentRejectsSplitShape(t *testing.T) {
+	a := newApp(t)
+	a.setupUser(t, "Alice", "alice@example.com", "password123")
+	a.postOK(t, "/groups", "name=Flat")
+	a.postOK(t, "/groups/1/members", "identity=Bob")
+
+	draft := a.openDraft(t, 1)
+	a.postOK(t, draft+"/submit", "description=Dinner&date=2026-09-05&split_mode=even&payer_id_0=1&payer_amount_0=30.00&participant_1=on&participant_2=on")
+	a.postOK(t, "/groups/1/settle", "from=2&to=1&amount=15.00")
+
+	resp := a.post(t, "/expenses/2/edit", strings.Join([]string{
+		"description=Payment+from+Bob+to+Alice", "date=2026-09-05", "category=payment",
+		"split_mode=even", "payer_id_0=2", "payer_amount_0=15.00",
+		"participant_1=on", "participant_2=on",
+	}, "&"))
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("split-shape payment edit: %d, want 422", resp.StatusCode)
+	}
+	_, body := a.get(t, "/groups/1")
+	if n := strings.Count(body, "settled up"); n != 2 {
+		t.Errorf("rejected edit changed the balances:\n%s", body)
+	}
+}
+
+// Ordinary expense edits describe what changed in the activity feed, and a
+// save without changes says so.
+func TestEditActivityDescribesChanges(t *testing.T) {
+	a := newApp(t)
+	a.setupUser(t, "Alice", "alice@example.com", "password123")
+	a.postOK(t, "/groups", "name=Flat")
+	a.postOK(t, "/groups/1/members", "identity=Bob")
+
+	draft := a.openDraft(t, 1)
+	a.postOK(t, draft+"/submit", "description=Dinner&date=2026-09-01&split_mode=even&payer_id_0=1&payer_amount_0=30.00&participant_1=on&participant_2=on")
+
+	form := func() string {
+		return strings.Join([]string{
+			"description=Dinner&date=2026-09-05&split_mode=even",
+			"payer_id_0=1", "payer_amount_0=30.00", "participant_1=on", "participant_2=on",
+		}, "&")
+	}
+	a.postOK(t, "/expenses/1/edit", form())
+
+	_, actBody := a.get(t, "/activity")
+	if !strings.Contains(actBody, "date → 2026-09-05") {
+		t.Errorf("activity should name the changed date:\n%s", actBody)
+	}
+
+	// A no-op save is reported as such.
+	a.postOK(t, "/expenses/1/edit", form())
+	_, actBody = a.get(t, "/activity")
+	if !strings.Contains(actBody, "no changes") {
+		t.Errorf("activity should report an unchanged save:\n%s", actBody)
 	}
 }
 

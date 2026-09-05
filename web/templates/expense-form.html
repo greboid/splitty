@@ -32,12 +32,18 @@
       <label for="category">Category</label>
       <select id="category" name="category">
         {{$cat := .Form.Category}}
-        {{range list "general" "groceries" "dining" "utilities" "rent" "travel" "entertainment" "shopping" "health" "other"}}
+        {{range list "general" "groceries" "dining" "utilities" "rent" "travel" "entertainment" "shopping" "health" "other" "payment"}}
+        {{if or (ne . "payment") (eq $cat "payment")}}
         <option value="{{.}}"{{if eq $cat .}} selected{{end}}>{{title .}}</option>
+        {{end}}
         {{end}}
       </select>
     </div>
   </div>
+
+  {{if and .Editing .IsPayment}}
+  <p class="hint">This is a settle-up payment: the payer's amount is recorded as paid and the recipient's exact amount as received — keep one payer and one recipient.</p>
+  {{end}}
 
   <div id="form-dynamic" class="form-dynamic">
     <!--
