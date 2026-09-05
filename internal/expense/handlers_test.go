@@ -103,3 +103,84 @@ func TestIsValidPaymentShape(t *testing.T) {
 		}
 	}
 }
+
+func TestFormFromExpenseModePresentation(t *testing.T) {
+	cases := []struct {
+		name      string
+		splitMode string
+		isPayment bool
+	}{
+		{"payment", SplitEven, true},
+		{"exact", SplitExact, false},
+		{"percent", SplitPercent, false},
+		{"shares", SplitShares, false},
+		{"empty legacy value", "", false},
+	}
+	for _, c := range cases {
+		e := Expense{
+			SplitMode: c.splitMode, IsPayment: c.isPayment,
+			Shares: []Share{
+				{UserID: 1, Paid: 1000, Owed: 200},
+				{UserID: 2, Owed: 600},
+				{UserID: 3, Owed: 200},
+			},
+		}
+		f := formFromExpense(e, []int64{1, 2, 3})
+		if f.Mode != SplitExact {
+			t.Errorf("%s: mode = %q, want %q", c.name, f.Mode, SplitExact)
+		}
+		if f.Exact[1] != "2.00" || f.Exact[2] != "6.00" || f.Exact[3] != "2.00" {
+			t.Errorf("%s: exact = %v, want stored owed amounts", c.name, f.Exact)
+		}
+		if len(f.Payers) != 1 || f.Payers[0].UserID != 1 || f.Payers[0].Amount != "10.00" {
+			t.Errorf("%s: payers = %v", c.name, f.Payers)
+		}
+	}
+}
+
+func TestFormFromExpenseEvenRoundTrip(t *testing.T) {
+	e := Expense{
+		SplitMode: SplitEven,
+		Shares: []Share{
+			{UserID: 1, Paid: 900, Owed: 300},
+			{UserID: 2, Owed: 300},
+			{UserID: 3, Owed: 300},
+		},
+	}
+	f := formFromExpense(e, []int64{1, 2, 3})
+	if f.Mode != SplitEven {
+		t.Fatalf("mode = %q, want even", f.Mode)
+	}
+	for _, id := range []int64{1, 2, 3} {
+		if !f.Participants[id] {
+			t.Errorf("participant %d not ticked: %v", id, f.Participants)
+		}
+	}
+	if len(f.Exact) != 0 {
+		t.Errorf("exact = %v, want empty in even mode", f.Exact)
+	}
+}
+
+func TestFormFromExpenseItemizedRoundTrip(t *testing.T) {
+	e := Expense{
+		SplitMode: SplitItemized,
+		Shares:    []Share{{UserID: 1, Paid: 500}},
+		Items: []Item{
+			{Description: "Milk", Amount: 200, Assignees: []int64{1, 2}},
+			{Description: "Bread", Amount: 300, Assignees: []int64{2}},
+		},
+	}
+	f := formFromExpense(e, []int64{1, 2})
+	if f.Mode != SplitItemized {
+		t.Fatalf("mode = %q, want itemized", f.Mode)
+	}
+	if len(f.Items) != 2 || f.Items[0].Description != "Milk" || f.Items[0].Amount != "2.00" {
+		t.Fatalf("items = %v", f.Items)
+	}
+	if len(f.Items[0].People) != 1 || f.Items[0].People[0] != "all" {
+		t.Errorf("items[0].people = %v, want [all]", f.Items[0].People)
+	}
+	if len(f.Items[1].People) != 1 || f.Items[1].People[0] != "2" {
+		t.Errorf("items[1].people = %v, want [2]", f.Items[1].People)
+	}
+}

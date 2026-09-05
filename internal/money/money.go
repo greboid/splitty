@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/big"
 	"strconv"
 	"strings"
 )
@@ -130,44 +131,55 @@ func Allocate(total Amount, n int) []Amount {
 // proportional value, and leftover minor units go one at a time to the most
 // under-allocated share (ties broken by lowest index). Returns nil when the
 // weights are empty, negative, or sum to zero. The results sum to exactly
-// total.
+// total. The intermediate products (total×weight, and the weight sum) can
+// exceed int64, so the arithmetic is carried out with math/big; every
+// share is at most |total| and therefore always fits.
 func AllocateByWeights(total Amount, weights []int64) []Amount {
 	if len(weights) == 0 {
 		return nil
 	}
-	var sum int64
-	for _, w := range weights {
+	var sum big.Int
+	bw := make([]big.Int, len(weights))
+	for i, w := range weights {
 		if w < 0 {
 			return nil
 		}
-		sum += w
+		bw[i].SetInt64(w)
+		sum.Add(&sum, &bw[i])
 	}
-	if sum == 0 {
+	if sum.Sign() == 0 {
 		return nil
 	}
-	sign := int64(1)
-	t := total
-	if t < 0 {
-		sign = -1
-		t = -t
-	}
+	t := new(big.Int).Abs(big.NewInt(total))
 	out := make([]Amount, len(weights))
-	var allocated int64
-	for i, w := range weights {
-		out[i] = t * w / sum
-		allocated += out[i]
+	// gap_i = t*w_i mod sum is exactly how far share i sits below its
+	// proportional value; giving share i one more unit reduces its gap by
+	// sum, so the gaps stay in [0, sum) throughout.
+	gaps := make([]big.Int, len(weights))
+	rem := new(big.Int).Set(t)
+	var prod, q big.Int
+	for i := range weights {
+		prod.Mul(t, &bw[i])
+		q.QuoRem(&prod, &sum, &gaps[i])
+		out[i] = q.Int64() // ≤ t, always fits
+		rem.Sub(rem, &q)
 	}
-	for rem := t - allocated; rem > 0; rem-- {
-		best, bestGap := -1, int64(-1)
-		for i, w := range weights {
-			if gap := t*w - out[i]*sum; gap > bestGap {
-				best, bestGap = i, gap
+	one := big.NewInt(1)
+	for rem.Sign() > 0 {
+		best := 0
+		for i := 1; i < len(weights); i++ {
+			if gaps[i].Cmp(&gaps[best]) > 0 {
+				best = i
 			}
 		}
 		out[best]++
+		gaps[best].Sub(&gaps[best], &sum)
+		rem.Sub(rem, one)
 	}
-	for i := range out {
-		out[i] *= sign
+	if total < 0 {
+		for i := range out {
+			out[i] = -out[i]
+		}
 	}
 	return out
 }

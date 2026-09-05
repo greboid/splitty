@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"image"
 	"image/color"
+	"image/jpeg"
 	"image/png"
 	"io"
 	"mime/multipart"
@@ -712,5 +713,58 @@ func TestClientScanContext(t *testing.T) {
 	}
 	if elapsed := time.Since(start); elapsed > 900*time.Millisecond {
 		t.Errorf("Scan took %v; the client timeout did not fire", elapsed)
+	}
+}
+
+// A JPEG mislabelled as a PNG (client-controlled multipart header) must be
+// stored under the type its bytes identify as: the stored content type is
+// re-served to browsers and sent to the vision API as a media type.
+func TestUploadContentTypeMatchesBytes(t *testing.T) {
+	store := mustStore(t)
+	h := &Handlers{Store: store, Client: NewClient("http://unused", "k", "m", "")}
+
+	var jpegBytes bytes.Buffer
+	img := image.NewRGBA(image.Rect(0, 0, 4, 4))
+	if err := jpeg.Encode(&jpegBytes, img, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	hdr := textproto.MIMEHeader{}
+	hdr.Set("Content-Disposition", `form-data; name="image"; filename="receipt.png"`)
+	hdr.Set("Content-Type", "image/png")
+	part, err := mw.CreatePart(hdr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write(jpegBytes.Bytes()); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/receipts", &body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	rec := httptest.NewRecorder()
+	h.Upload(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp scanResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(resp.File, ".jpg") {
+		t.Errorf("stored name = %q, want .jpg extension", resp.File)
+	}
+	f, ctype, err := store.Open(resp.File)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	if ctype != "image/jpeg" {
+		t.Errorf("stored content type = %q, want image/jpeg", ctype)
 	}
 }

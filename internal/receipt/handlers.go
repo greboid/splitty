@@ -77,6 +77,15 @@ func (h *Handlers) Upload(w http.ResponseWriter, r *http.Request) {
 	// Best-effort: unsuitable images pass through untouched.
 	data = prepareImage(data)
 
+	// The stored content type must describe the stored bytes, not the
+	// client's label: prepareImage re-encodes in the format it decoded,
+	// which can differ from the multipart header. Sniff magic bytes and
+	// trust them whenever they name a supported type, so the type sent to
+	// the vision API and served back to browsers always matches the image.
+	if t := http.DetectContentType(data); allowedTypes[t] != "" {
+		ctype = t
+	}
+
 	name, err := h.Store.Save(ctype, bytes.NewReader(data))
 	if err != nil {
 		switch {

@@ -107,6 +107,23 @@ func TestComputeOwedShares(t *testing.T) {
 	}
 }
 
+// Regression: share counts are arbitrary int64s from the form; huge ones
+// used to overflow the weight arithmetic and panic the handler.
+func TestComputeOwedSharesHugeWeights(t *testing.T) {
+	in := &SplitInput{
+		Mode: SplitShares, MemberIDs: members(1, 2),
+		Payers:       []PayerInput{{1, 10}},
+		SharesWeight: map[int64]int64{1: 5000000000000000000, 2: 4000000000000000000},
+	}
+	owed, err := in.ComputeOwed()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if owed[1] != 6 || owed[2] != 4 {
+		t.Errorf("owed = %v, want [1]=6 [2]=4", owed)
+	}
+}
+
 func TestComputeOwedItemized(t *testing.T) {
 	in := &SplitInput{
 		Mode: SplitItemized, MemberIDs: members(1, 2),

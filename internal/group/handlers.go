@@ -198,6 +198,7 @@ func (h *Handlers) Detail(w http.ResponseWriter, r *http.Request) {
 
 	bexp := BalanceExpenses(expenses)
 	net := balance.Net(bexp)
+	pairwise := balance.Pairwise(bexp)
 	names := nameMap(members)
 
 	page := groupPage{Common: h.common(r, u), Group: g}
@@ -211,7 +212,7 @@ func (h *Handlers) Detail(w http.ResponseWriter, r *http.Request) {
 	for _, m := range members {
 		row := memberRow{User: m, Net: net[m.ID], IsYou: m.ID == u.ID}
 		// Pairwise position between the current user and this member.
-		for _, d := range balance.Pairwise(bexp) {
+		for _, d := range pairwise {
 			if d.From == u.ID && d.To == m.ID {
 				row.YouOwe = d.Amount
 			}

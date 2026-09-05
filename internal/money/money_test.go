@@ -1,6 +1,9 @@
 package money
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
 
 func TestParseAndFormat(t *testing.T) {
 	cases := []struct {
@@ -93,6 +96,11 @@ func TestAllocateByWeights(t *testing.T) {
 		{"negative total", -1000, []int64{1, 3}, []Amount{-250, -750}},
 		{"uneven", 999, []int64{2, 1}, []Amount{666, 333}},
 		{"zero weight participant", 300, []int64{2, 0, 1}, []Amount{200, 0, 100}},
+		// Regression: these used to overflow t*w (and the weight sum) and
+		// panic with index out of range [-1], or silently misallocate.
+		{"huge weights", 10, []int64{5000000000000000000, 4000000000000000000}, []Amount{6, 4}},
+		{"weights sum past MaxInt64", 100, []int64{math.MaxInt64, math.MaxInt64}, []Amount{50, 50}},
+		{"max weight vs one", 10000, []int64{math.MaxInt64, 1}, []Amount{10000, 0}},
 	}
 	for _, c := range cases {
 		got := AllocateByWeights(c.total, c.weights)

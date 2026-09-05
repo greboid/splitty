@@ -50,7 +50,10 @@
       expense-form.js takes over this section (payers, split mode tabs,
       participant rows, itemization) initialised from the JSON payload in
       #form-payload below. Without JS, this no-JS fallback covers the
-      common case: one payer and an even split.
+      common case: one payer and an even split. It carries over the saved
+      form state (first payer, their amount, and — for an even split — the
+      participants) so a no-JS edit of an even expense is faithful; other
+      modes still need JS.
     -->
     <input type="hidden" name="split_mode" value="even">
 
@@ -63,15 +66,17 @@
           <option value="{{.ID}}"{{if and $cur (eq (index $cur 0).UserID .ID)}} selected{{end}}>{{.Name}}</option>
           {{end}}
         </select>
-        <input type="text" name="payer_amount_0" inputmode="decimal" placeholder="0.00" aria-label="Amount paid" required>
+        <input type="text" name="payer_amount_0" inputmode="decimal" placeholder="0.00" aria-label="Amount paid" required
+               {{if $cur}}value="{{(index $cur 0).Amount}}"{{end}}>
       </div>
     </fieldset>
 
     <fieldset>
       <legend>Split equally between</legend>
       <div class="checkbox-grid">
+        {{$parts := .Form.Participants}}
         {{range .Members}}
-        <label class="checkbox"><input type="checkbox" name="participant_{{.ID}}" checked> {{.Name}}</label>
+        <label class="checkbox"><input type="checkbox" name="participant_{{.ID}}"{{if or (not $parts) (index $parts .ID)}} checked{{end}}> {{.Name}}</label>
         {{end}}
       </div>
     </fieldset>

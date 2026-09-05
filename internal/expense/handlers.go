@@ -306,10 +306,13 @@ func (h *Handlers) Edit(w http.ResponseWriter, r *http.Request) {
 }
 
 // formFromExpense reconstructs an editable form from a stored expense.
-// Payments are presented in exact mode (payer + the recipient's exact
-// amount) rather than the even split they are stored with, so saving an
-// untouched form reproduces the same payer→recipient rows instead of
-// recomputing the transfer as a 50/50 split.
+// Even and itemized splits round-trip in their own mode (participants and
+// items are stored). Payments, exact, percent and shares expenses are
+// presented in exact mode — payer plus each participant's owed amount —
+// because the original mode inputs (percentages, share counts) are not
+// stored anywhere: exact amounts are the faithful presentation, and saving
+// an untouched form reproduces the same share rows instead of blocking on
+// inputs the form no longer holds.
 func formFromExpense(e Expense, memberIDs []int64) ExpenseForm {
 	f := ExpenseForm{
 		Description:  e.Description,
@@ -323,10 +326,12 @@ func formFromExpense(e Expense, memberIDs []int64) ExpenseForm {
 		Percent:      map[int64]string{},
 		Shares:       map[int64]string{},
 	}
-	if f.Mode == "" {
+	switch {
+	case e.IsPayment:
 		f.Mode = SplitExact
-	}
-	if e.IsPayment {
+	case e.SplitMode == SplitEven || e.SplitMode == SplitItemized:
+		// Native round-trip modes.
+	default: // exact, percent, shares and any legacy value
 		f.Mode = SplitExact
 	}
 	for _, s := range e.Shares {

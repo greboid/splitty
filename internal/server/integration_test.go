@@ -9,12 +9,14 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -1018,4 +1020,90 @@ func TestCSRFBlocksForeignOrigin(t *testing.T) {
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("cross-site POST: %d, want 403", resp.StatusCode)
 	}
+}
+
+// Editing a percent (or shares) expense presents the stored owed amounts in
+// exact mode — the percentages are not stored, so exact is the faithful
+// presentation — and saving the untouched form reproduces the same shares.
+func TestEditPercentExpenseRoundTrip(t *testing.T) {
+	a := newApp(t)
+	a.setupUser(t, "Alice", "alice@example.com", "password123")
+	a.postOK(t, "/groups", "name=Flat")
+	a.postOK(t, "/groups/1/members", "identity=Bob")
+
+	draft := a.openDraft(t, 1)
+	a.postOK(t, draft+"/submit",
+		"description=Gas&date=2026-09-01&split_mode=percent&payer_id_0=1&payer_amount_0=100.00&percent_1=33.33&percent_2=66.67")
+
+	code, body := a.get(t, "/expenses/1/edit")
+	if code != 200 {
+		t.Fatalf("edit page: %d", code)
+	}
+	payload := editPayload(t, body)
+	if payload.Mode != "exact" {
+		t.Fatalf("payload mode = %q, want exact", payload.Mode)
+	}
+	if payload.Exact["1"] != "33.33" || payload.Exact["2"] != "66.67" {
+		t.Errorf("payload exact = %v, want the stored owed amounts", payload.Exact)
+	}
+
+	// Saving the untouched form keeps the split identical.
+	a.postOK(t, "/expenses/1/edit",
+		"description=Gas&date=2026-09-01&split_mode=exact&payer_id_0=1&payer_amount_0=100.00&exact_1=33.33&exact_2=66.67")
+	_, detail := a.get(t, "/expenses/1")
+	if !strings.Contains(detail, "£33.33") || !strings.Contains(detail, "£66.67") {
+		t.Errorf("edited expense lost its split:\n%s", detail)
+	}
+}
+
+// The no-JS fallback of the edit form carries over the saved state: the
+// payer's amount and, for an even split, the original participants only.
+func TestEditPageNoJSFallbackFidelity(t *testing.T) {
+	a := newApp(t)
+	a.setupUser(t, "Alice", "alice@example.com", "password123")
+	a.postOK(t, "/groups", "name=Flat")
+	a.postOK(t, "/groups/1/members", "identity=Bob")
+	a.postOK(t, "/groups/1/members", "identity=Carol")
+
+	draft := a.openDraft(t, 1)
+	// Split between Alice and Bob only; Carol must not come pre-ticked.
+	a.postOK(t, draft+"/submit",
+		"description=Dinner&date=2026-09-01&split_mode=even&payer_id_0=1&payer_amount_0=30.00&participant_1=on&participant_2=on")
+
+	code, body := a.get(t, "/expenses/1/edit")
+	if code != 200 {
+		t.Fatalf("edit page: %d", code)
+	}
+	if !strings.Contains(body, `name="payer_amount_0"`) ||
+		!strings.Contains(body, `value="30.00"`) {
+		t.Errorf("payer amount not prefilled in the no-JS fallback")
+	}
+	if !strings.Contains(body, `name="participant_1" checked`) ||
+		!strings.Contains(body, `name="participant_2" checked`) {
+		t.Errorf("original participants not ticked in the no-JS fallback")
+	}
+	if strings.Contains(body, `name="participant_3" checked`) {
+		t.Errorf("non-participant Carol pre-ticked in the no-JS fallback")
+	}
+}
+
+// editPayload extracts the JSON payload the edit page embeds for
+// expense-form.js (the attribute is HTML-escaped).
+type editPagePayload struct {
+	Mode  string            `json:"mode"`
+	Exact map[string]string `json:"exact"`
+}
+
+func editPayload(t *testing.T, body string) editPagePayload {
+	t.Helper()
+	re := regexp.MustCompile(`(?s)<div id="form-payload" data-payload="([^"]*)"`)
+	m := re.FindStringSubmatch(body)
+	if m == nil {
+		t.Fatal("no form payload in edit page")
+	}
+	var p editPagePayload
+	if err := json.Unmarshal([]byte(html.UnescapeString(m[1])), &p); err != nil {
+		t.Fatalf("payload is not JSON: %v", err)
+	}
+	return p
 }

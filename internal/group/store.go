@@ -153,11 +153,6 @@ func (s *Store) AddMember(groupID, userID int64) error {
 	return err
 }
 
-func (s *Store) RemoveMember(groupID, userID int64) error {
-	_, err := s.DB.Exec(`DELETE FROM memberships WHERE group_id = ? AND user_id = ?`, groupID, userID)
-	return err
-}
-
 func (s *Store) Update(groupID int64, name string) error {
 	_, err := s.DB.Exec(`UPDATE groups SET name = ? WHERE id = ?`, name, groupID)
 	return err
