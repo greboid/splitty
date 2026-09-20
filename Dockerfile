@@ -1,4 +1,4 @@
-FROM reg.g5d.dev/golang AS builder
+FROM git.mouse-lake.ts.net/containers/golang AS builder
 
 WORKDIR /app
 COPY . /app
