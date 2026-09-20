@@ -24,22 +24,7 @@ jobs:
       - uses: actions/toolkit/docker-login@master
         with:
           audience: u:1:814abaff-ffb8-4621-a283-4d7dcc136fa8
+          ghcr: ${{ secrets.GHCR_TOKEN }}
       - uses: actions/toolkit/docker-push@master
         with:
           ghcr: true
-          ghcr-token: ${{ secrets.GHCR_TOKEN }}
-  release:
-    if: github.ref_type == 'tag'
-    runs-on: alpine
-    needs:
-      - test
-      - container
-    steps:
-      - uses: actions/toolkit/git-checkout@master
-      - uses: actions/toolkit/docker-login@master
-        with:
-          audience: u:1:814abaff-ffb8-4621-a283-4d7dcc136fa8
-      - uses: actions/toolkit/docker-push@master
-        with:
-          ghcr: true
-          ghcr-token: ${{ secrets.GHCR_TOKEN }}
