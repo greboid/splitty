@@ -7,7 +7,7 @@ require (
 	github.com/csmith/middleware v1.3.0
 	github.com/csmith/slogflags v1.2.0
 	github.com/pressly/goose/v3 v3.27.3
-	github.com/uptrace/bun/driver/pgdriver v1.2.18
+	github.com/uptrace/bun/driver/pgdriver v1.3.0
 	modernc.org/sqlite v1.60.1
 )
 
@@ -23,7 +23,7 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/sethvargo/go-retry v0.4.0 // indirect
 	github.com/tmthrgd/go-hex v0.0.0-20190904060850-447a3041c3bc // indirect
-	github.com/uptrace/bun v1.2.18 // indirect
+	github.com/uptrace/bun v1.3.0 // indirect
 	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	go.opentelemetry.io/otel v1.44.0 // indirect
