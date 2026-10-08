@@ -1,0 +1,15 @@
+name: PR Checks
+
+on:
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: alpine
+    steps:
+      - uses: actions/toolkit/git-checkout@master
+      - uses: actions/toolkit/go-setup@master
+      - uses: actions/toolkit/go-vet@master
+      - uses: actions/toolkit/go-test@master
+      - uses: actions/toolkit/go-build@master
+      - uses: actions/toolkit/docker-build@master
