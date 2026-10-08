@@ -5,6 +5,7 @@ package config
 
 import (
 	"flag"
+	"strings"
 	"time"
 )
 
@@ -66,14 +67,14 @@ func (r *repeatableStrings) String() string {
 	if r == nil || r.v == nil {
 		return ""
 	}
-	out := ""
+	var out strings.Builder
 	for i, s := range *r.v {
 		if i > 0 {
-			out += ", "
+			out.WriteString(", ")
 		}
-		out += s
+		out.WriteString(s)
 	}
-	return out
+	return out.String()
 }
 
 func (r *repeatableStrings) Set(s string) error {

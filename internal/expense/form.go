@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -47,10 +48,8 @@ func (fi FormItem) amountValue() int64 {
 // assignees resolves the People list to concrete member ids; "all" means
 // every member. Returns an error message when an id is unparseable.
 func (fi FormItem) assignees(memberIDs []int64) ([]int64, error) {
-	for _, p := range fi.People {
-		if p == "all" {
-			return append([]int64{}, memberIDs...), nil
-		}
+	if slices.Contains(fi.People, "all") {
+		return append([]int64{}, memberIDs...), nil
 	}
 	var out []int64
 	for _, p := range fi.People {
@@ -269,10 +268,5 @@ var receiptFileRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-
 func ValidReceiptFile(s string) bool { return receiptFileRe.MatchString(s) }
 
 func validCategory(c string) bool {
-	for _, cat := range Categories {
-		if cat == c {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(Categories, c)
 }

@@ -3,6 +3,7 @@ package expense
 import (
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/greboid/splitpayments/internal/money"
 )
@@ -51,12 +52,7 @@ func (in *SplitInput) Total() int64 {
 }
 
 func (in *SplitInput) isMember(id int64) bool {
-	for _, m := range in.MemberIDs {
-		if m == id {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(in.MemberIDs, id)
 }
 
 // ComputeOwed validates the input against its mode and returns the owed

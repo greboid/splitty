@@ -24,8 +24,8 @@ func syntheticReceipt(t *testing.T, w, h, margin int, skewDeg float64) []byte {
 	bg := color.RGBA{R: 60, G: 60, B: 60, A: 255}
 	paper := color.RGBA{R: 228, G: 228, B: 224, A: 255}
 	ink := color.RGBA{R: 30, G: 30, B: 30, A: 255}
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			img.Set(x, y, bg)
 		}
 	}
@@ -42,7 +42,7 @@ func syntheticReceipt(t *testing.T, w, h, margin int, skewDeg float64) []byte {
 				continue // dashes, like glyphs separated by paper
 			}
 			y := baseY + int(float64(x-px0-4)*tan)
-			for dy := 0; dy < 2; dy++ {
+			for dy := range 2 {
 				if y+dy >= py0 && y+dy < py1 {
 					img.Set(x, y+dy, ink)
 				}
@@ -75,9 +75,9 @@ func inkRowScore(t *testing.T, img image.Image, deg float64) float64 {
 	winW, winH := inscribedSize(w, h, deg)
 	rot, rw, rh := rotateGrayWindow(grey, w, h, winW, winH, deg)
 	var s float64
-	for y := 0; y < rh; y++ {
+	for y := range rh {
 		var row float64
-		for x := 0; x < rw; x++ {
+		for x := range rw {
 			row += float64(255 - rot[y*rw+x])
 		}
 		s += row * row

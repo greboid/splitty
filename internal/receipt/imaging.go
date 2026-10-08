@@ -105,8 +105,8 @@ func trimReceipt(img image.Image) (image.Image, bool) {
 	rows := make([]int, h)
 	cols := make([]int, w)
 	paper, ink := 0, 0
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			i := y*w + x
 			if int(grey[i]) >= cut && sat[i] <= paperMaxSat {
 				rows[y]++
@@ -243,9 +243,9 @@ func bestSkewAngle(grey []uint8, w, h int) (bestDeg float64, bestScore, straight
 	score := func(deg float64) float64 {
 		rot, rw, rh := rotateGrayWindow(grey, w, h, winW, winH, deg)
 		var s float64
-		for y := 0; y < rh; y++ {
+		for y := range rh {
 			var rowInk float64
-			for x := 0; x < rw; x++ {
+			for x := range rw {
 				rowInk += float64(255 - rot[y*rw+x])
 			}
 			s += rowInk * rowInk
@@ -279,8 +279,8 @@ func grayscalePlane(img image.Image) (grey, sat []uint8) {
 	w, h := b.Dx(), b.Dy()
 	grey = make([]uint8, w*h)
 	sat = make([]uint8, w*h)
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			r, g, bl, _ := img.At(b.Min.X+x, b.Min.Y+y).RGBA()
 			r8, g8, b8 := uint8(r>>8), uint8(g>>8), uint8(bl>>8)
 			grey[y*w+x] = uint8((299*int(r8) + 587*int(g8) + 114*int(b8)) / 1000)
@@ -307,7 +307,7 @@ func otsuThreshold(grey []uint8) (int, float64, float64) {
 	var wLow, sumLow float64
 	var lowMean, highMean float64
 	best := -1.0
-	for t := 0; t < 256; t++ {
+	for t := range 256 {
 		wLow += float64(hist[t])
 		if wLow == 0 {
 			continue
@@ -373,11 +373,11 @@ func downscaleGray(grey []uint8, w, h, maxEdge int) ([]uint8, int, int) {
 	}
 	dw, dh := w/k, h/k
 	out := make([]uint8, dw*dh)
-	for y := 0; y < dh; y++ {
-		for x := 0; x < dw; x++ {
+	for y := range dh {
+		for x := range dw {
 			var sum int
-			for dy := 0; dy < k; dy++ {
-				for dx := 0; dx < k; dx++ {
+			for dy := range k {
+				for dx := range k {
 					sum += int(grey[(y*k+dy)*w+x*k+dx])
 				}
 			}
@@ -406,9 +406,9 @@ func rotateGrayWindow(grey []uint8, w, h, wo, ho int, deg float64) ([]uint8, int
 	c, s := math.Cos(t), math.Sin(t)
 	cx, cy := float64(w)/2, float64(h)/2
 	out := make([]uint8, wo*ho)
-	for y := 0; y < ho; y++ {
+	for y := range ho {
 		dy := float64(y) - float64(ho)/2 + 0.5
-		for x := 0; x < wo; x++ {
+		for x := range wo {
 			dx := float64(x) - float64(wo)/2 + 0.5
 			out[y*wo+x] = sampleGray(grey, w, h, cx+dx*c-dy*s, cy+dx*s+dy*c)
 		}
@@ -426,9 +426,9 @@ func rotateImage(img image.Image, deg float64) image.Image {
 	t := deg * math.Pi / 180
 	c, s := math.Cos(t), math.Sin(t)
 	cx, cy := float64(w)/2, float64(h)/2
-	for y := 0; y < ho; y++ {
+	for y := range ho {
 		dy := float64(y) - float64(ho)/2 + 0.5
-		for x := 0; x < wo; x++ {
+		for x := range wo {
 			dx := float64(x) - float64(wo)/2 + 0.5
 			dst.Set(x, y, sampleColor(img, b, cx+dx*c-dy*s, cy+dx*s+dy*c))
 		}
@@ -461,7 +461,7 @@ func sampleColor(img image.Image, b image.Rectangle, x, y float64) color.RGBA {
 	tl, tr := at(x0, y0), at(x0+1, y0)
 	bl, br := at(x0, y0+1), at(x0+1, y0+1)
 	var out [4]uint8
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		top := tl[i]*(1-fx) + tr[i]*fx
 		bot := bl[i]*(1-fx) + br[i]*fx
 		v := (top*(1-fy) + bot*fy) / 257 // 16-bit back to 8-bit

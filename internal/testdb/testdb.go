@@ -21,7 +21,7 @@ import (
 	"github.com/greboid/splitpayments/internal/database"
 )
 
-var openCount int64
+var openCount atomic.Int64
 
 // Open returns a migrated database private to the test.
 func Open(t *testing.T) *sql.DB {
@@ -89,7 +89,7 @@ func openPostgres(dsn string) (*sql.DB, error) {
 // perCallDatabase derives the DSN of a per-call database from dsn, returning
 // it alongside the bare database name.
 func perCallDatabase(dsn string) (string, string, error) {
-	n := atomic.AddInt64(&openCount, 1)
+	n := openCount.Add(1)
 	suffix := fmt.Sprintf("_t%d_%d", os.Getpid(), n)
 	if u, err := url.Parse(dsn); err == nil &&
 		(u.Scheme == "postgres" || u.Scheme == "postgresql") {

@@ -59,7 +59,7 @@ func parseReceiptMarkdown(md string) (ScanResult, error) {
 	var totals, taxes, tips []float64
 	parsedAny := false
 
-	for _, line := range strings.Split(md, "\n") {
+	for line := range strings.SplitSeq(md, "\n") {
 		desc, amount, ok := splitLine(line)
 		if !ok {
 			continue
@@ -147,7 +147,7 @@ func classifyLine(desc string) lineKind {
 // findMerchant takes the first header-like line: anything before the first
 // priced line that isn't a recognised keyword line.
 func findMerchant(md string) string {
-	for _, line := range strings.Split(md, "\n") {
+	for line := range strings.SplitSeq(md, "\n") {
 		if _, _, ok := splitLine(line); ok {
 			return "" // items have started; the header is over
 		}

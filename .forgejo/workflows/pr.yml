@@ -12,4 +12,6 @@ jobs:
       - uses: actions/toolkit/go-vet@master
       - uses: actions/toolkit/go-test@master
       - uses: actions/toolkit/go-build@master
+        with:
+          packages: ./cmd/splitpayments
       - uses: actions/toolkit/docker-build@master

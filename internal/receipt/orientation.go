@@ -72,7 +72,7 @@ func tiffOrientation(tiff []byte) int {
 		return 1
 	}
 	entries := int(order.Uint16(tiff[ifd : ifd+2]))
-	for i := 0; i < entries; i++ {
+	for i := range entries {
 		off := ifd + 2 + i*12
 		if off+12 > len(tiff) {
 			return 1
