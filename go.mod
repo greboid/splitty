@@ -8,7 +8,7 @@ require (
 	github.com/csmith/slogflags v1.2.0
 	github.com/pressly/goose/v3 v3.27.3
 	github.com/uptrace/bun/driver/pgdriver v1.3.0
-	modernc.org/sqlite v1.61.0
+	modernc.org/sqlite v1.61.1
 )
 
 require (
