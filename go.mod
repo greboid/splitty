@@ -4,7 +4,7 @@ go 1.27.0
 
 require (
 	github.com/csmith/envflag/v2 v2.0.0
-	github.com/csmith/middleware v1.3.0
+	github.com/csmith/middleware v1.4.0
 	github.com/csmith/slogflags v1.2.0
 	github.com/pressly/goose/v3 v3.27.3
 	github.com/uptrace/bun/driver/pgdriver v1.3.0
